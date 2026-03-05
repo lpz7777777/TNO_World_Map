@@ -59,6 +59,8 @@ Fallback Data Source / 备用数据源: REST Countries API
 <img width="3028" height="1566" alt="image" src="https://github.com/user-attachments/assets/b142f943-8789-48b4-8117-56a5240c49de" />
 <img width="3036" height="1568" alt="image" src="https://github.com/user-attachments/assets/62d14afa-add8-4186-a957-76544c1645c8" />
 <img width="3036" height="1554" alt="image" src="https://github.com/user-attachments/assets/9b2cea5a-b4e2-455a-a5d1-05747303ba4c" />
+<img width="3034" height="1572" alt="image" src="https://github.com/user-attachments/assets/042a3088-8c2f-4436-b499-58ac8108261b" />
+
 
 
 
