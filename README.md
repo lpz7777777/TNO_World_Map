@@ -39,7 +39,8 @@ This is a pure Front-End project with zero build dependencies.
 
 1. **Clone the repository / 克隆仓库:**
    ```bash
-   git clone [https://github.com/YourUsername/TNO_World_Map.git](https://github.com/YourUsername/TNO_World_Map.git)
+   git clone [https://github.com/lpz7777777/TNO_World_Map.git](https://github.com/lpz7777777/TNO_World_Map.git)
+   
 Open the file / 打开文件:
 Directly double-click TNO_World_Map.html in your browser.
 由于所有数据已完成跨域处理和单文件内嵌转换，你可以直接双击运行 TNO_World_Map.html，或使用 VS Code 的 Live Server 插件打开以获得最佳体验。
