@@ -124,6 +124,26 @@
       margin-bottom: 12px;
       word-break: break-word;
     }
+    .panel-tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .tab-btn {
+      border: 1px solid var(--line);
+      background: rgba(4, 18, 18, 0.75);
+      color: var(--sub);
+      font-size: 12px;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      color: var(--text);
+      border-color: var(--main);
+      box-shadow: inset 0 0 8px rgba(142, 216, 216, 0.25);
+    }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
 
     .info-row {
       display: flex;
@@ -325,6 +345,68 @@
 
     .status { margin-top: 8px; font-size: 12px; color: var(--sub); }
     .status.warn { color: var(--warn); }
+    .economy-chart {
+      width: 100%;
+      border: 1px solid rgba(69, 139, 139, 0.3);
+      background: rgba(69, 139, 139, 0.04);
+      padding: 8px;
+    }
+    .eco-chart-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+    .eco-item {
+      border: 1px solid rgba(69, 139, 139, 0.22);
+      background: rgba(3, 10, 10, 0.35);
+      padding: 4px;
+    }
+    .eco-item-title {
+      font-size: 11px;
+      color: var(--sub);
+      margin: 0 0 2px 2px;
+    }
+    .eco-item svg {
+      width: 100%;
+      height: 120px;
+      display: block;
+    }
+    .economy-note {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--sub);
+    }
+    .mil-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .mil-card {
+      border: 1px solid rgba(69, 139, 139, 0.32);
+      padding: 6px;
+      background: rgba(69, 139, 139, 0.05);
+      font-size: 12px;
+    }
+    .weapon-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .weapon-item img {
+      width: 100%;
+      height: 90px;
+      object-fit: cover;
+      border: 1px solid var(--line);
+      background: #051010;
+    }
+    .weapon-item .name {
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--sub);
+      text-align: center;
+      min-height: 28px;
+    }
 
     .loading {
       position: absolute;
@@ -360,7 +442,13 @@
 
   <div class="ui-panel" id="ui-panel">
     <div class="ui-header" id="c-name">UNKNOWN</div>
+    <div class="panel-tabs">
+      <button class="tab-btn active" id="tab-overview" data-tab="overview">概览</button>
+      <button class="tab-btn" id="tab-economy" data-tab="economy">经济数据</button>
+      <button class="tab-btn" id="tab-military" data-tab="military">军事实力</button>
+    </div>
 
+    <div class="tab-pane active" id="pane-overview">
     <div class="leadership-wrap">
       <div class="leadership-main">
         <div class="flag-party-row">
@@ -412,6 +500,23 @@
     </div>
 
     <div class="desc" id="c-desc">暂无国家描述。</div>
+    </div>
+
+    <div class="tab-pane" id="pane-economy">
+      <div class="economy-chart" id="economy-chart"></div>
+      <div class="economy-note" id="economy-note">正在等待国家选择。</div>
+    </div>
+
+    <div class="tab-pane" id="pane-military">
+      <div class="mil-grid">
+        <div class="mil-card"><span id="mil-label-total">总兵力</span>：<b id="mil-total">-</b></div>
+        <div class="mil-card"><span id="mil-label-army">陆军</span>：<b id="mil-army">-</b></div>
+        <div class="mil-card"><span id="mil-label-navy">海军</span>：<b id="mil-navy">-</b></div>
+        <div class="mil-card"><span id="mil-label-air">空军</span>：<b id="mil-air">-</b></div>
+      </div>
+      <div class="weapon-grid" id="weapon-grid"></div>
+    </div>
+
     <div class="status" id="data-status">来源：本地 + Wikidata</div>
   </div>
 
@@ -1844,6 +1949,32 @@
         { "name_en": "CNT", "desc_en": "National Transitional Council (Military Appointed)" }
       ]
     };
+    const LOCAL_MILITARY_DATA = {
+      CHN: {
+        total: 2035000, army: 975000, navy: 260000, air: 398000,
+        weapons: [
+          { name: "歼-20", name_en: "J-20", img: "https://commons.wikimedia.org/wiki/Special:FilePath/Chengdu_J-20_at_CCAS2022_(20220827161335).jpg?width=480" },
+          { name: "055型驱逐舰", name_en: "Type 055 Destroyer", img: "https://commons.wikimedia.org/wiki/Special:FilePath/Nanchang_(101).jpg?width=480" },
+          { name: "东风-41", name_en: "DF-41", img: "https://commons.wikimedia.org/wiki/Special:FilePath/DF-41_at_70th_anniversary_of_the_People%27s_Republic_of_China_parade.jpg?width=480" }
+        ]
+      },
+      USA: {
+        total: 1328000, army: 452000, navy: 347000, air: 318000,
+        weapons: [
+          { name: "F-35", name_en: "F-35", img: "https://commons.wikimedia.org/wiki/Special:FilePath/F-35A_flight_(cropped).jpg?width=480" },
+          { name: "福特级航母", name_en: "Ford-class Carrier", img: "https://commons.wikimedia.org/wiki/Special:FilePath/USS_Gerald_R._Ford_(CVN-78)_underway_on_8_April_2017.JPG?width=480" },
+          { name: "M1A2", name_en: "M1A2 Abrams", img: "https://commons.wikimedia.org/wiki/Special:FilePath/M1A2_SEPv2_Abrams_tank.jpg?width=480" }
+        ]
+      },
+      RUS: {
+        total: 1150000, army: 550000, navy: 150000, air: 165000,
+        weapons: [
+          { name: "苏-57", name_en: "Su-57", img: "https://commons.wikimedia.org/wiki/Special:FilePath/Sukhoi_Su-57_at_MAKS-2019_(2020-07-20).jpg?width=480" },
+          { name: "北风之神级", name_en: "Borei-class SSBN", img: "https://commons.wikimedia.org/wiki/Special:FilePath/Russian_submarine_Yury_Dolgorukiy.jpg?width=480" },
+          { name: "T-14", name_en: "T-14 Armata", img: "https://commons.wikimedia.org/wiki/Special:FilePath/T-14_Armata.jpg?width=480" }
+        ]
+      }
+    };
 
     const WORLD_GEOJSON_URLS = [
       "https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson",
@@ -1925,6 +2056,20 @@
         countryPhotoUnknown: "暂无代表照片",
         parliament: "立法机构（席位分布）",
         seat: "席位",
+        tabOverview: "概览",
+        tabEconomy: "经济数据",
+        tabMilitary: "军事实力",
+        ecoWaiting: "正在等待国家选择。",
+        ecoLoading: "正在加载经济数据...",
+        ecoNoData: "部分年份无数据，图中已留空。",
+        ecoGdp: "GDP（美元）",
+        ecoPoverty: "贫困率（%）",
+        ecoHdi: "HDI（指数）",
+        ecoAge: "0-14岁人口占比（%）",
+        milTotal: "总兵力",
+        milArmy: "陆军",
+        milNavy: "海军",
+        milAir: "空军",
         sourceInitial: "来源：本地单文件 + Wikidata",
         sourceLocalCache: "来源：本地单文件 + 全局缓存",
         sourceLive: "来源：Wikidata 实时查询 + 本地单文件",
@@ -1956,6 +2101,20 @@
         countryPhotoUnknown: "No landmark image",
         parliament: "Legislature (Seat Distribution)",
         seat: "Seats",
+        tabOverview: "Overview",
+        tabEconomy: "Economy",
+        tabMilitary: "Military",
+        ecoWaiting: "Select a country to view data.",
+        ecoLoading: "Loading economic indicators...",
+        ecoNoData: "Missing years are left blank with no interpolation.",
+        ecoGdp: "GDP (USD)",
+        ecoPoverty: "Poverty Rate (%)",
+        ecoHdi: "HDI (Index)",
+        ecoAge: "Population Aged 0-14 (%)",
+        milTotal: "Total Personnel",
+        milArmy: "Army",
+        milNavy: "Navy",
+        milAir: "Air Force",
         sourceInitial: "Source: local single-file data + Wikidata",
         sourceLocalCache: "Source: local single-file data + global cache",
         sourceLive: "Source: live Wikidata query + local single-file data",
@@ -1975,6 +2134,10 @@
     let selectedGeoName = "UNKNOWN";
     let mapFeatures = [];
     let currentZoomTransform = d3.zoomIdentity;
+    let audioCtx = null;
+    let clickBus = null;
+    let selectedCountryData = null;
+    let selectedIso2 = null;
     const zoomBehavior = d3.zoom().scaleExtent([1, 8]).on("zoom", event => {
       currentZoomTransform = event.transform;
       const t = currentZoomTransform;
@@ -2018,6 +2181,13 @@
       document.getElementById("label-gdp").innerText = t("gdp");
       document.getElementById("label-population").innerText = t("population");
       document.getElementById("label-parliament").innerText = t("parliament");
+      document.getElementById("tab-overview").innerText = t("tabOverview");
+      document.getElementById("tab-economy").innerText = t("tabEconomy");
+      document.getElementById("tab-military").innerText = t("tabMilitary");
+      document.getElementById("mil-label-total").innerText = t("milTotal");
+      document.getElementById("mil-label-army").innerText = t("milArmy");
+      document.getElementById("mil-label-navy").innerText = t("milNavy");
+      document.getElementById("mil-label-air").innerText = t("milAir");
 
       const loadingEl = document.getElementById("loading");
       if (loadingEl.style.display !== "none") loadingEl.innerText = t("loading");
@@ -2035,6 +2205,7 @@
         document.getElementById("c-country-photo").src = fallbackPixel;
         document.getElementById("c-country-photo-name").innerText = t("countryPhotoUnknown");
         document.getElementById("c-desc").innerText = t("noDescription");
+        document.getElementById("economy-note").innerText = t("ecoWaiting");
       }
     }
 
@@ -2171,6 +2342,60 @@
       return fetchJsonFromUrls(urls, { headers: { Accept: "application/sparql-results+json" } });
     }
 
+    function ensureClickAudio() {
+      if (!audioCtx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return null;
+        audioCtx = new Ctx();
+        clickBus = audioCtx.createGain();
+        clickBus.gain.value = 0.25;
+        clickBus.connect(audioCtx.destination);
+      }
+      if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+      return audioCtx;
+    }
+
+    function playUiClickSfx() {
+      const ctx = ensureClickAudio();
+      if (!ctx || !clickBus) return;
+      const now = ctx.currentTime;
+
+      const osc = ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(780, now);
+      osc.frequency.exponentialRampToValueAtTime(240, now + 0.055);
+
+      const toneGain = ctx.createGain();
+      toneGain.gain.setValueAtTime(0.0001, now);
+      toneGain.gain.exponentialRampToValueAtTime(0.34, now + 0.005);
+      toneGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.085);
+
+      const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.08), ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const noiseFilter = ctx.createBiquadFilter();
+      noiseFilter.type = "bandpass";
+      noiseFilter.frequency.value = 2200;
+      noiseFilter.Q.value = 1.4;
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.0001, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.16, now + 0.003);
+      noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+
+      osc.connect(toneGain);
+      toneGain.connect(clickBus);
+      noise.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(clickBus);
+
+      osc.start(now);
+      osc.stop(now + 0.095);
+      noise.start(now);
+      noise.stop(now + 0.07);
+    }
+
     function parseWktPoint(wkt) {
       if (typeof wkt !== "string") return null;
       const m = wkt.match(/Point\(([-\d.]+)\s+([-\d.]+)\)/i);
@@ -2279,6 +2504,157 @@
       const y = Math.min(maxY, Math.max(minY, event.clientY + offset));
       tip.style.left = `${x}px`;
       tip.style.top = `${y}px`;
+    }
+
+    function activateTab(tabKey) {
+      const keys = ["overview", "economy", "military"];
+      keys.forEach(k => {
+        document.getElementById(`tab-${k}`).classList.toggle("active", k === tabKey);
+        document.getElementById(`pane-${k}`).classList.toggle("active", k === tabKey);
+      });
+    }
+
+    function iso3ToIso2(code) {
+      const map = { CHN: "CN", USA: "US", RUS: "RU", GBR: "GB", FRA: "FR", DEU: "DE", JPN: "JP", IND: "IN", BRA: "BR", CAN: "CA", KOR: "KR", TWN: "TW" };
+      return map[canonicalIso(code)] || null;
+    }
+
+    async function fetchWorldBankSeries(iso2, indicator) {
+      if (!iso2) return [];
+      const urls = [
+        `https://api.worldbank.org/v2/country/${iso2}/indicator/${indicator}?format=json&per_page=80`,
+        `https://mirror.ghproxy.com/https://api.worldbank.org/v2/country/${iso2}/indicator/${indicator}?format=json&per_page=80`
+      ];
+      try {
+        const json = await fetchJsonFromUrls(urls);
+        const rows = Array.isArray(json?.[1]) ? json[1] : [];
+        return rows
+          .map(r => ({ year: Number(r.date), value: Number(r.value) }))
+          .filter(x => Number.isFinite(x.year) && Number.isFinite(x.value))
+          .sort((a, b) => a.year - b.year);
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function buildYearSlots(series, years) {
+      const map = new Map(series.map(x => [x.year, x.value]));
+      return years.map(y => ({
+        year: y,
+        value: Number.isFinite(map.get(y)) ? map.get(y) : null
+      }));
+    }
+
+    function drawSingleIndicatorChart(target, title, data, color, formatter) {
+      const holder = document.createElement("div");
+      holder.className = "eco-item";
+      holder.innerHTML = `<div class="eco-item-title">${title}</div>`;
+      target.appendChild(holder);
+
+      const w = Math.max(300, target.clientWidth - 24);
+      const h = 120;
+      const m = { t: 8, r: 12, b: 22, l: 50 };
+      const svg = d3.select(holder).append("svg").attr("viewBox", `0 0 ${w} ${h}`).attr("preserveAspectRatio", "none");
+      const years = data.map(d => d.year);
+      const valid = data.filter(d => Number.isFinite(d.value));
+      const x = d3.scaleLinear().domain([years[0], years[years.length - 1]]).range([m.l, w - m.r]);
+      const yDomain = valid.length > 0 ? d3.extent(valid, d => d.value) : [0, 1];
+      const pad = ((yDomain[1] - yDomain[0]) || 1) * 0.12;
+      const y = d3.scaleLinear().domain([yDomain[0] - pad, yDomain[1] + pad]).range([h - m.b, m.t]);
+
+      svg.append("g")
+        .attr("transform", `translate(0,${h - m.b})`)
+        .call(d3.axisBottom(x).ticks(5).tickFormat(d3.format("d")))
+        .call(g => g.selectAll("text").attr("fill", "#9fd0d0").style("font-size", "9px"))
+        .call(g => g.selectAll("line,path").attr("stroke", "#3f7f7f"));
+      svg.append("g")
+        .attr("transform", `translate(${m.l},0)`)
+        .call(d3.axisLeft(y).ticks(4).tickFormat(formatter))
+        .call(g => g.selectAll("text").attr("fill", "#9fd0d0").style("font-size", "9px"))
+        .call(g => g.selectAll("line,path").attr("stroke", "#3f7f7f"));
+
+      const line = d3.line()
+        .defined(d => Number.isFinite(d.value))
+        .x(d => x(d.year))
+        .y(d => y(d.value))
+        .curve(d3.curveMonotoneX);
+      svg.append("path")
+        .datum(data)
+        .attr("fill", "none")
+        .attr("stroke", color)
+        .attr("stroke-width", 2)
+        .attr("d", line);
+
+      svg.selectAll(".pt")
+        .data(valid)
+        .enter()
+        .append("circle")
+        .attr("cx", d => x(d.year))
+        .attr("cy", d => y(d.value))
+        .attr("r", 2.2)
+        .attr("fill", color);
+    }
+
+    function drawEconomyChart(gdpSeries, povertySeries, hdiSeries, ageSeries) {
+      const el = document.getElementById("economy-chart");
+      el.innerHTML = "";
+      const grid = document.createElement("div");
+      grid.className = "eco-chart-grid";
+      el.appendChild(grid);
+      drawSingleIndicatorChart(grid, t("ecoGdp"), gdpSeries, "#6cc9ff", d3.format(".2s"));
+      drawSingleIndicatorChart(grid, t("ecoPoverty"), povertySeries, "#ffb16b", d => `${d3.format(".1f")(d)}%`);
+      drawSingleIndicatorChart(grid, t("ecoHdi"), hdiSeries, "#95f18f", d3.format(".2f"));
+      drawSingleIndicatorChart(grid, t("ecoAge"), ageSeries, "#f0de84", d => `${d3.format(".1f")(d)}%`);
+    }
+
+    function formatNum(n) {
+      return Number.isFinite(n) ? n.toLocaleString(currentLang === "en" ? "en-US" : "zh-CN") : "-";
+    }
+
+    function renderMilitaryPane(code) {
+      const n = canonicalIso(code);
+      const base = LOCAL_MILITARY_DATA[n];
+      const total = base?.total || Math.round((Number(selectedCountryData?.population_raw || 0) || 5000000) * 0.008);
+      const army = base?.army || Math.round(total * 0.56);
+      const navy = base?.navy || Math.round(total * 0.17);
+      const air = base?.air || Math.round(total * 0.21);
+      document.getElementById("mil-total").innerText = formatNum(total);
+      document.getElementById("mil-army").innerText = formatNum(army);
+      document.getElementById("mil-navy").innerText = formatNum(navy);
+      document.getElementById("mil-air").innerText = formatNum(air);
+
+      const weaponGrid = document.getElementById("weapon-grid");
+      weaponGrid.innerHTML = "";
+      const weapons = Array.isArray(base?.weapons) && base.weapons.length > 0 ? base.weapons : [
+        { name: currentLang === "en" ? "Main Battle Tank" : "主战坦克", name_en: "Main Battle Tank", img: selectedCountryData?.landmark_img || fallbackPixel },
+        { name: currentLang === "en" ? "Fighter Aircraft" : "战斗机", name_en: "Fighter Aircraft", img: selectedCountryData?.hos_img || fallbackPixel },
+        { name: currentLang === "en" ? "Capital Vessel" : "主力舰艇", name_en: "Capital Vessel", img: selectedCountryData?.hog_img || fallbackPixel }
+      ];
+      weapons.slice(0, 3).forEach(w => {
+        const div = document.createElement("div");
+        div.className = "weapon-item";
+        const displayName = currentLang === "en" ? (w.name_en || w.name) : (w.name || w.name_en);
+        div.innerHTML = `<img src="${safeImg(w.img)}" alt="weapon"><div class="name">${displayName}</div>`;
+        weaponGrid.appendChild(div);
+      });
+    }
+
+    async function loadEconomyPane(code) {
+      const note = document.getElementById("economy-note");
+      note.innerText = t("ecoLoading");
+      const iso2 = selectedIso2 || iso3ToIso2(code);
+      const gdp = await fetchWorldBankSeries(iso2, "NY.GDP.MKTP.CD");
+      const pov = await fetchWorldBankSeries(iso2, "SI.POV.DDAY");
+      const hci = await fetchWorldBankSeries(iso2, "HD.HCI.OVRL");
+      const age = await fetchWorldBankSeries(iso2, "SP.POP.0014.TO.ZS");
+      const currentYear = new Date().getFullYear();
+      const years = Array.from({ length: 10 }, (_, i) => currentYear - 9 + i);
+      const gdpSet = buildYearSlots(gdp, years);
+      const povSet = buildYearSlots(pov, years);
+      const hdiSet = buildYearSlots(hci, years);
+      const ageSet = buildYearSlots(age, years);
+      drawEconomyChart(gdpSet, povSet, hdiSet, ageSet);
+      note.innerText = t("ecoNoData");
     }
 
     function drawParliament(list) {
@@ -2447,6 +2823,7 @@
     }
 
     function applyPanel(data, geoName, sourceKey, code) {
+      selectedCountryData = { ...data };
       document.getElementById("ui-panel").style.display = "block";
       document.getElementById("c-name").innerText = data.name || geoName || code || t("unknown");
       renderCapitalMarker(data.capital_coord || null);
@@ -2470,6 +2847,8 @@
       statusEl.innerText = t(sourceKey);
       syncSelectionStyles();
       drawParliament(data.parliament || []);
+      renderMilitaryPane(code);
+      loadEconomyPane(code);
     }
 
     function syncSelectionStyles() {
@@ -2506,7 +2885,9 @@ GROUP BY ?iso3 ?countryLabel`;
           name: row.countryLabel?.value || code,
           ideology: row.govLabel?.value || null,
           gdp,
-          population: populationText(populationRaw)
+          population: populationText(populationRaw),
+          gdp_value_raw: raw,
+          population_raw: populationRaw
         };
       }
     }
@@ -2560,6 +2941,8 @@ LIMIT 1`;
         landmark_img: row.capitalImage?.value,
         landmark_name: row.capitalLabel?.value,
         capital_coord: parseWktPoint(row.capitalCoord?.value),
+        gdp_value_raw: Number(row.gdpValue?.value),
+        population_raw: Number(row.populationValue?.value),
         parliament: localizedParliamentList(n, parliamentData[n] || [])
       };
 
@@ -2607,6 +2990,8 @@ LIMIT 1`;
         ideology: base.ideology || t("unknown"),
         gdp: base.gdp || t("noRecord"),
         population: base.population || t("noRecord"),
+        gdp_value_raw: Number(base.gdp_value_raw),
+        population_raw: Number(base.population_raw),
         parliament: localizedParliamentList(n, parliamentData[n] || [])
       };
 
@@ -2694,8 +3079,11 @@ LIMIT 1`;
           .on("click", function(_e, d) {
             selectedIso = canonicalIso(iso3(d));
             selectedGeoName = getGeoDisplayName(iso3(d), d.properties?.name || t("unknown"));
+            const rawIso2 = (d.properties?.iso_a2 || "").toUpperCase();
+            selectedIso2 = selectedIso === "CHN" ? "CN" : (rawIso2 && rawIso2 !== "-99" ? rawIso2 : iso3ToIso2(selectedIso));
             clearCapitalMarkers();
             syncSelectionStyles();
+            playUiClickSfx();
             showCountry(selectedIso, selectedGeoName);
           });
       });
@@ -2705,6 +3093,10 @@ LIMIT 1`;
     }
 
     const langSelect = document.getElementById("language-select");
+    window.addEventListener("pointerdown", () => { ensureClickAudio(); }, { once: true });
+    document.querySelectorAll(".tab-btn").forEach(btn => {
+      btn.addEventListener("click", () => activateTab(btn.dataset.tab));
+    });
     const browserLang = (navigator.language || "").toLowerCase();
     if (browserLang.startsWith("en")) currentLang = "en";
     langSelect.value = currentLang;
@@ -2725,6 +3117,11 @@ LIMIT 1`;
       } else {
         document.getElementById("data-status").innerText = t("sourceInitial");
       }
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (!audioCtx) return;
+      if (document.hidden) audioCtx.suspend().catch(() => {});
     });
 
     init().catch(err => {
