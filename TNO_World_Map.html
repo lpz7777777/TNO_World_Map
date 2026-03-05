@@ -1,0 +1,2736 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TNO 风格交互式世界地图</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+    :root {
+      --bg: #030808;
+      --panel-bg: rgba(4, 10, 10, 0.95);
+      --main: #8ed8d8;
+      --sub: #5d9e9e;
+      --line: #458b8b;
+      --text: #e0f8f8;
+      --warn: #ff9a6b;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--main);
+      font-family: "Courier New", Courier, monospace;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    .scanlines {
+      position: fixed;
+      inset: 0;
+      background:
+        linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+        linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+      background-size: 100% 4px, 3px 100%;
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    .top-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 32px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      border-bottom: 2px solid var(--line);
+      background: rgba(4, 10, 10, 0.9);
+      font-family: 'VT323', monospace;
+      font-size: 22px;
+      z-index: 10;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .top-bar-title {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .lang-select {
+      background: rgba(4, 10, 10, 0.95);
+      color: var(--text);
+      border: 1px solid var(--line);
+      font-family: "Courier New", Courier, monospace;
+      font-size: 13px;
+      padding: 2px 6px;
+      height: 24px;
+    }
+
+    #map-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      cursor: crosshair;
+      overflow: hidden;
+    }
+
+    .country {
+      stroke: var(--line);
+      stroke-width: 0.5;
+      transition: fill .15s ease, filter .15s ease;
+    }
+
+    .country:hover {
+      filter: drop-shadow(0 0 5px var(--main));
+      stroke-width: 1;
+    }
+
+    .country.selected {
+      stroke: var(--text);
+      stroke-width: 1.5;
+    }
+
+    .ui-panel {
+      position: absolute;
+      right: 20px;
+      top: 48px;
+      width: 560px;
+      max-height: calc(100vh - 68px);
+      overflow: auto;
+      background: var(--panel-bg);
+      border: 2px solid var(--line);
+      box-shadow: inset 0 0 15px rgba(69, 139, 139, .5), 0 0 20px rgba(0, 0, 0, .8);
+      padding: 16px;
+      display: none;
+      z-index: 100;
+    }
+
+    .ui-header {
+      font-size: 24px;
+      color: var(--text);
+      text-shadow: 0 0 5px var(--main);
+      text-align: center;
+      border-bottom: 2px dashed var(--line);
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      word-break: break-word;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+      font-size: 14px;
+    }
+    .stats-parliament-wrap {
+      display: flex;
+      gap: 12px;
+      align-items: stretch;
+      margin-bottom: 10px;
+    }
+    .stats-col {
+      width: 40%;
+      min-width: 0;
+    }
+    .stats-col .info-row {
+      justify-content: flex-start;
+      gap: 10px;
+      margin-bottom: 7px;
+    }
+    .stats-col .info-label {
+      width: 78px;
+      flex: 0 0 78px;
+    }
+    .stats-col .info-value {
+      text-align: left;
+      flex: 1 1 auto;
+    }
+    .parliament-col {
+      width: 60%;
+      min-width: 0;
+    }
+    .parliament-col .parliament-container {
+      margin: 0;
+    }
+
+    .info-label { color: var(--sub); }
+    .info-value { color: var(--text); font-weight: bold; text-align: right; }
+    .flag-party-row {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      margin-bottom: 8px;
+    }
+    .leadership-wrap {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 10px;
+      align-items: stretch;
+    }
+    .leadership-main {
+      width: 66%;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .country-photo-card {
+      width: 34%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0;
+      background: transparent;
+      min-height: 100%;
+      margin-top: 14px;  /* 添加这一行，数值可以根据你的需要微调，比如 8px, 15px 等 */
+    }
+    .country-photo-img {
+      width: 100%;
+      height: 262px;
+      min-height: 262px;
+      flex: 0 0 auto;
+      object-fit: cover;
+      border: 1px solid var(--line);
+      background: #051010;
+    }
+    .country-photo-title {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--sub);
+      text-align: center;
+    }
+    .country-photo-name {
+      margin-top: 3px;
+      color: var(--text);
+      font-size: 12px;
+      text-align: center;
+      line-height: 1.3;
+      min-height: 30px;
+    }
+    .flag-party-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 50%;
+    }
+    .flag-party-img {
+      width: 112px;
+      height: 72px;
+      object-fit: contain;
+    }
+    .flag-party-img.flag {
+      border: 1px solid var(--line);
+      object-fit: cover;
+    }
+    .flag-party-title {
+      margin-top: 5px;
+      font-size: 12px;
+      color: var(--sub);
+    }
+    .flag-party-name {
+      margin-top: 2px;
+      color: var(--text);
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 170px;
+      text-align: center;
+    }
+
+    .leaders-container {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .leader-card {
+      width: 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .leader-img {
+      width: 120px;
+      height: 160px;
+      object-fit: cover;
+      border: 1px solid var(--line);
+      background: #051010;
+      filter: brightness(0.78) contrast(1.18) saturate(0.7);
+    }
+
+    .leader-title { font-size: 12px; color: var(--sub); margin-top: 6px; }
+    .leader-name { font-size: 14px; color: #fff; text-align: center; margin-top: 2px; }
+
+    .parliament-container {
+      margin: 12px 0;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      border: 1px solid rgba(69, 139, 139, 0.3);
+      padding: 8px;
+      background: transparent;
+      margin-top: -60px;
+    }
+    .parliament-layout {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+    }
+
+    #parliament-chart {
+      width: 100%;
+      height: 200px;
+      margin-top: -70px;
+      margin-left: 20px;
+    }
+
+    .party-tooltip {
+      position: fixed;
+      z-index: 1200;
+      max-width: 280px;
+      padding: 8px;
+      background: rgba(6, 22, 22, 0.9);
+      border-left: 3px solid var(--line);
+      border: 1px solid rgba(142, 216, 216, 0.35);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      font-size: 13px;
+      display: none;
+      pointer-events: none;
+    }
+
+    .desc {
+      margin-top: 0;
+      font-size: 13px;
+      color: #a0caca;
+      line-height: 1.5;
+      text-align: justify;
+      padding: 10px;
+      background: rgba(69, 139, 139, 0.1);
+      border-left: 3px solid var(--main);
+      min-height: 98px;
+      width: 100%;
+    }
+
+    .status { margin-top: 8px; font-size: 12px; color: var(--sub); }
+    .status.warn { color: var(--warn); }
+
+    .loading {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      font-family: 'VT323', monospace;
+      font-size: 28px;
+      color: var(--text);
+      z-index: 20;
+    }
+    .capital-pulse-ring {
+      opacity: 0.8;
+    }
+
+    /* 自定义滚动条样式 */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.3); }
+    ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div class="scanlines"></div>
+  <div class="top-bar">
+    <div class="top-bar-title" id="top-title">TNO WORLD INTELLIGENCE TERMINAL</div>
+    <select id="language-select" class="lang-select" aria-label="Language">
+      <option value="zh">中文</option>
+      <option value="en">English</option>
+    </select>
+  </div>
+  <div id="map-container"></div>
+  <div class="loading" id="loading">LOADING MAP...</div>
+
+  <div class="ui-panel" id="ui-panel">
+    <div class="ui-header" id="c-name">UNKNOWN</div>
+
+    <div class="leadership-wrap">
+      <div class="leadership-main">
+        <div class="flag-party-row">
+          <div class="flag-party-card">
+            <img class="flag-party-img flag" id="c-flag" alt="flag" />
+            <div class="flag-party-title" id="label-flag">国旗</div>
+          </div>
+          <div class="flag-party-card">
+            <img class="flag-party-img" id="c-ruling-logo" alt="party-logo" />
+            <div class="flag-party-title" id="label-ruling-party">执政党</div>
+            <div class="flag-party-name" id="c-ruling-name">UNKNOWN</div>
+          </div>
+        </div>
+        <div class="leaders-container">
+          <div class="leader-card">
+            <img class="leader-img" id="hos-img" alt="hos" />
+            <div class="leader-title" id="hos-title">国家元首</div>
+            <div class="leader-name" id="hos-name">DATA CLASSIFIED</div>
+          </div>
+          <div class="leader-card">
+            <img class="leader-img" id="hog-img" alt="hog" />
+            <div class="leader-title" id="hog-title">政府首脑</div>
+            <div class="leader-name" id="hog-name">DATA CLASSIFIED</div>
+          </div>
+        </div>
+      </div>
+      <div class="country-photo-card">
+        <img class="country-photo-img" id="c-country-photo" alt="country-photo" />
+        <div class="country-photo-title" id="label-country-photo">国家印象</div>
+        <div class="country-photo-name" id="c-country-photo-name">UNKNOWN</div>
+      </div>
+    </div>
+
+    <div class="stats-parliament-wrap">
+      <div class="stats-col">
+        <div class="info-row"><div class="info-label" id="label-ideology">政体</div><div class="info-value" id="c-ideology">UNKNOWN</div></div>
+        <div class="info-row"><div class="info-label" id="label-gdp">名义 GDP</div><div class="info-value" id="c-gdp">NO RECORD</div></div>
+        <div class="info-row"><div class="info-label" id="label-population">人口</div><div class="info-value" id="c-population">NO RECORD</div></div>
+      </div>
+      <div class="parliament-col">
+        <div class="parliament-container">
+          <div class="info-label" id="label-parliament" style="font-size:12px;margin-bottom:4px;">立法机构（席位分布）</div>
+          <div class="parliament-layout">
+            <div id="parliament-chart"></div>
+          </div>
+          <div class="party-tooltip" id="party-tooltip"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="desc" id="c-desc">暂无国家描述。</div>
+    <div class="status" id="data-status">来源：本地 + Wikidata</div>
+  </div>
+
+  <script>
+    // ==========================================
+    // 将原本在 JSON 文件中的数据直接内嵌在 JS 中
+    // 彻底解决浏览器双击本地文件的跨域读取限制
+    // ==========================================
+    const LOCAL_PARLIAMENT_DATA = {
+      "CHN": [
+        { "name": "中国共产党", "seats": 2511, "color": "#DE2910", "desc": "中共党员及无党派代表" },
+        { "name": "九三学社", "seats": 61, "color": "#0054A6", "desc": "民主党派：科学技术/高教界代表" },
+        { "name": "农工党", "seats": 60, "color": "#009900", "desc": "中国农工民主党：医药卫生界" },
+        { "name": "民盟", "seats": 55, "color": "#0066B3", "desc": "中国民主同盟：文化教育界" },
+        { "name": "民进", "seats": 54, "color": "#8B008B", "desc": "中国民主促进会：教育出版界" },
+        { "name": "民建", "seats": 44, "color": "#FF8C00", "desc": "中国民主建国会：经济界" },
+        { "name": "民革", "seats": 41, "color": "#000095", "desc": "中国国民党革命委员会" },
+        { "name": "致公党", "seats": 39, "color": "#E31E24", "desc": "中国致公党：归侨侨眷界" },
+        { "name": "台盟", "seats": 13, "color": "#228B22", "desc": "台湾民主自治同盟" },
+        { "name": "空缺", "seats": 99, "color": "#666666", "desc": "暂未补选的空缺席位" }
+      ],
+      "DEU": [
+        { "name": "CDU/CSU", "seats": 208, "color": "#000000", "desc": "联盟党（基民盟与基社盟）" },
+        { "name": "AfD", "seats": 152, "color": "#009ee0", "desc": "德国选择党" },
+        { "name": "SPD", "seats": 120, "color": "#E3000F", "desc": "社会民主党" },
+        { "name": "GRÜNE", "seats": 85, "color": "#64A12D", "desc": "绿党" },
+        { "name": "Die Linke", "seats": 64, "color": "#BE3075", "desc": "左翼党" },
+        { "name": "SSW", "seats": 1, "color": "#006B6B", "desc": "南石勒苏益格选民协会" }
+      ],
+      "GBR": [
+        { "name": "Labour", "seats": 411, "color": "#E4003B", "desc": "工党" },
+        { "name": "Conservative", "seats": 121, "color": "#0087DC", "desc": "保守党" },
+        { "name": "Liberal Democrats", "seats": 72, "color": "#FAA61A", "desc": "自由民主党" },
+        { "name": "SNP", "seats": 9, "color": "#FDF38E", "desc": "苏格兰民族党" },
+        { "name": "Sinn Féin", "seats": 7, "color": "#00623B", "desc": "新芬党" },
+        { "name": "Reform UK", "seats": 5, "color": "#00B140", "desc": "改革英国" },
+        { "name": "DUP", "seats": 5, "color": "#D46A4C", "desc": "民主统一党" },
+        { "name": "其他", "seats": 18, "color": "#999999", "desc": "独立议员及绿党等" }
+      ],
+      "USA": [
+        { "name": "Republican", "seats": 220, "color": "#E81B23", "desc": "共和党" },
+        { "name": "Democrat", "seats": 215, "color": "#3333FF", "desc": "民主党" }
+      ],
+      "FRA": [
+        { "name": "新人民阵线", "seats": 193, "color": "#E31E24", "desc": "左翼联盟" },
+        { "name": "在一起", "seats": 166, "color": "#FFED00", "desc": "马克龙总统多数派联盟" },
+        { "name": "国民联盟", "seats": 142, "color": "#003399", "desc": "极右翼政党" },
+        { "name": "共和党", "seats": 47, "color": "#0054A4", "desc": "传统右翼" },
+        { "name": "其他", "seats": 29, "color": "#999999", "desc": "其他政党及独立议员" }
+      ],
+      "JPN": [
+        { "name": "自民党", "seats": 191, "color": "#E60012", "desc": "自由民主党" },
+        { "name": "立宪民主党", "seats": 148, "color": "#0077C1", "desc": "立宪民主党" },
+        { "name": "日本维新会", "seats": 38, "color": "#FF6600", "desc": "日本维新会" },
+        { "name": "国民民主党", "seats": 28, "color": "#00AA40", "desc": "国民民主党" },
+        { "name": "公明党", "seats": 24, "color": "#FECE00", "desc": "公明党" },
+        { "name": "令和新选组", "seats": 9, "color": "#0088CC", "desc": "令和新选组" },
+        { "name": "日本共产党", "seats": 8, "color": "#E91E63", "desc": "日本共产党" },
+        { "name": "无党派", "seats": 19, "color": "#666666", "desc": "无党派及其他" }
+      ],
+      "ESP": [
+        { "name": "PP", "seats": 136, "color": "#0066B3", "desc": "人民党" },
+        { "name": "PSOE", "seats": 103, "color": "#ED1C25", "desc": "工人社会党" },
+        { "name": "PSC", "seats": 19, "color": "#E31E24", "desc": "加泰社会党" },
+        { "name": "Vox", "seats": 33, "color": "#63BE21", "desc": "呼声党" },
+        { "name": "SUMAR", "seats": 26, "color": "#7B2D8E", "desc": "苏马尔联盟" },
+        { "name": "ERC", "seats": 7, "color": "#F9B625", "desc": "加泰共和左翼" },
+        { "name": "Junts", "seats": 7, "color": "#006633", "desc": "一起为了加泰罗尼亚" },
+        { "name": "EH Bildu", "seats": 6, "color": "#00843D", "desc": "巴斯克左翼" },
+        { "name": "PNV", "seats": 5, "color": "#009639", "desc": "巴斯克民族党" },
+        { "name": "其他", "seats": 12, "color": "#999999", "desc": "混合组及其他" }
+      ],
+      "ITA": [
+        { "name": "FdI", "seats": 116, "color": "#003366", "desc": "意大利兄弟党" },
+        { "name": "PD", "seats": 70, "color": "#E4002B", "desc": "民主党" },
+        { "name": "Lega", "seats": 59, "color": "#00A651", "desc": "联盟党" },
+        { "name": "Forza Italia", "seats": 54, "color": "#0066B3", "desc": "意大利力量党" },
+        { "name": "M5S", "seats": 49, "color": "#FFCC00", "desc": "五星运动" },
+        { "name": "AVS", "seats": 10, "color": "#2E7D32", "desc": "绿党与左翼联盟" },
+        { "name": "Azione", "seats": 10, "color": "#E91E63", "desc": "行动党" },
+        { "name": "其他", "seats": 32, "color": "#666666", "desc": "混合组及其他" }
+      ],
+      "RUS": [
+        { "name": "统一俄罗斯", "seats": 324, "color": "#0039A6", "desc": "统一俄罗斯党" },
+        { "name": "俄罗斯共产党", "seats": 57, "color": "#E4002B", "desc": "俄罗斯联邦共产党" },
+        { "name": "公正俄罗斯", "seats": 28, "color": "#E91E63", "desc": "公正俄罗斯党" },
+        { "name": "自由民主党", "seats": 21, "color": "#0066B3", "desc": "自由民主党" },
+        { "name": "新人党", "seats": 15, "color": "#FF6600", "desc": "新人党" },
+        { "name": "无党派", "seats": 5, "color": "#999999", "desc": "无党派" }
+      ],
+      "IND": [
+        { "name": "BJP", "seats": 240, "color": "#FF9933", "desc": "印度人民党 (NDA)" },
+        { "name": "INC", "seats": 99, "color": "#138808", "desc": "印度国民大会党 (INDIA)" },
+        { "name": "SP", "seats": 37, "color": "#FF0000", "desc": "社会党 (INDIA)" },
+        { "name": "TMC", "seats": 29, "color": "#00A651", "desc": "草根国大党 (INDIA)" },
+        { "name": "DMK", "seats": 22, "color": "#CC0000", "desc": "德拉维达进步联盟 (INDIA)" },
+        { "name": "TDP", "seats": 16, "color": "#FFFF00", "desc": "泰卢固之乡党 (NDA)" },
+        { "name": "JD(U)", "seats": 12, "color": "#003366", "desc": "人民党(联合派) (NDA)" },
+        { "name": "其他", "seats": 88, "color": "#666666", "desc": "其他政党" }
+      ],
+      "BRA": [
+        { "name": "PL", "seats": 99, "color": "#0066B3", "desc": "自由党" },
+        { "name": "PT", "seats": 68, "color": "#E4002B", "desc": "劳工党" },
+        { "name": "PP", "seats": 50, "color": "#003366", "desc": "进步党" },
+        { "name": "MDB", "seats": 42, "color": "#00A651", "desc": "巴西民主运动" },
+        { "name": "UNIÃO", "seats": 59, "color": "#FF6600", "desc": "巴西联盟" },
+        { "name": "其他", "seats": 107, "color": "#666666", "desc": "其他政党" }
+      ],
+      "CAN": [
+        { "name": "Liberal", "seats": 158, "color": "#D71920", "desc": "自由党" },
+        { "name": "Conservative", "seats": 119, "color": "#1A4782", "desc": "保守党" },
+        { "name": "Bloc Québécois", "seats": 32, "color": "#33B2CC", "desc": "魁北克人政团" },
+        { "name": "NDP", "seats": 25, "color": "#F37021", "desc": "新民主党" },
+        { "name": "Green", "seats": 2, "color": "#3D9B35", "desc": "绿党" },
+        { "name": "Independent", "seats": 2, "color": "#999999", "desc": "独立议员" }
+      ],
+      "NLD": [
+        { "name": "PVV", "seats": 37, "color": "#0071BC", "desc": "自由党" },
+        { "name": "GroenLinks-PvdA", "seats": 25, "color": "#64A12D", "desc": "绿党-工党联盟" },
+        { "name": "VVD", "seats": 24, "color": "#FF6600", "desc": "自由民主人民党" },
+        { "name": "NSC", "seats": 20, "color": "#333333", "desc": "新社会契约" },
+        { "name": "D66", "seats": 9, "color": "#009900", "desc": "民主党66" },
+        { "name": "BBB", "seats": 7, "color": "#006B6B", "desc": "农民公民运动" },
+        { "name": "CDA", "seats": 5, "color": "#FF6600", "desc": "基督教民主联盟" },
+        { "name": "其他", "seats": 33, "color": "#666666", "desc": "其他政党" }
+      ],
+      "SWE": [
+        { "name": "S", "seats": 107, "color": "#E4002B", "desc": "社会民主党" },
+        { "name": "SD", "seats": 72, "color": "#FECB00", "desc": "瑞典民主党" },
+        { "name": "M", "seats": 68, "color": "#004B87", "desc": "温和党" },
+        { "name": "KD", "seats": 19, "color": "#000077", "desc": "基督教民主党" },
+        { "name": "V", "seats": 24, "color": "#AF0000", "desc": "左翼党" },
+        { "name": "C", "seats": 23, "color": "#006AB3", "desc": "中间党" },
+        { "name": "MP", "seats": 18, "color": "#83CF39", "desc": "环境党" },
+        { "name": "L", "seats": 16, "color": "#006AB3", "desc": "自由党" }
+      ],
+      "AUS": [
+        { "name": "Labor", "seats": 78, "color": "#E4002B", "desc": "工党" },
+        { "name": "Liberal", "seats": 41, "color": "#003366", "desc": "自由党" },
+        { "name": "National", "seats": 21, "color": "#006B3F", "desc": "国家党" },
+        { "name": "Greens", "seats": 4, "color": "#009F3D", "desc": "绿党" },
+        { "name": "独立议员", "seats": 12, "color": "#666666", "desc": "独立议员" },
+        { "name": "其他", "seats": 5, "color": "#999999", "desc": "其他" }
+      ],
+      "KOR": [
+        { "name": "国民力量", "seats": 108, "color": "#E4002B", "desc": "国民力量党" },
+        { "name": "共同民主党", "seats": 175, "color": "#0094FF", "desc": "共同民主党" },
+        { "name": "祖国革新党", "seats": 12, "color": "#FF6600", "desc": "祖国革新党" },
+        { "name": "改革革新党", "seats": 3, "color": "#FFCC00", "desc": "改革革新党" },
+        { "name": "其他", "seats": 12, "color": "#666666", "desc": "其他政党" }
+      ],
+      "POL": [
+        { "name": "PiS", "seats": 194, "color": "#073A76", "desc": "法律与公正党" },
+        { "name": "KO", "seats": 157, "color": "#F7B731", "desc": "公民联盟" },
+        { "name": "TD", "seats": 65, "color": "#8B4513", "desc": "第三条路" },
+        { "name": "Lewica", "seats": 26, "color": "#E4002B", "desc": "左翼联盟" },
+        { "name": "Konfederacja", "seats": 18, "color": "#333333", "desc": "自由与独立联盟" }
+      ],
+      "TUR": [
+        { "name": "AKP", "seats": 268, "color": "#FF6600", "desc": "正义与发展党" },
+        { "name": "CHP", "seats": 169, "color": "#E4002B", "desc": "共和人民党" },
+        { "name": "MHP", "seats": 50, "color": "#C8102E", "desc": "民族主义运动党" },
+        { "name": "İYİ", "seats": 43, "color": "#00A651", "desc": "好党" },
+        { "name": "其他", "seats": 20, "color": "#666666", "desc": "其他政党" }
+      ],
+      "MEX": [
+        { "name": "MORENA", "seats": 236, "color": "#8B0000", "desc": "国家复兴运动" },
+        { "name": "PVEM", "seats": 77, "color": "#009900", "desc": "生态绿党" },
+        { "name": "PAN", "seats": 72, "color": "#0054A6", "desc": "国家行动党" },
+        { "name": "PT", "seats": 51, "color": "#E31E24", "desc": "劳动党" },
+        { "name": "PRI", "seats": 35, "color": "#00994C", "desc": "革命制度党" },
+        { "name": "MC", "seats": 27, "color": "#FF8C00", "desc": "公民运动" },
+        { "name": "其他", "seats": 2, "color": "#666666", "desc": "其他政党及独立议员" }
+      ],
+      "ARG": [
+        { "name": "自由前进党", "seats": 38, "color": "#FFD700", "desc": "自由前进党" },
+        { "name": "祖国联盟", "seats": 33, "color": "#8B0000", "desc": "祖国联盟" },
+        { "name": "激进公民联盟", "seats": 5, "color": "#E4002B", "desc": "激进公民联盟" },
+        { "name": "其他", "seats": 35, "color": "#666666", "desc": "其他政党" }
+      ],
+      "ZAF": [
+        { "name": "ANC", "seats": 159, "color": "#000000", "desc": "非洲人国民大会" },
+        { "name": "DA", "seats": 87, "color": "#0066B3", "desc": "民主联盟" },
+        { "name": "MK", "seats": 58, "color": "#006600", "desc": "民族之矛党" },
+        { "name": "EFF", "seats": 39, "color": "#E4002B", "desc": "经济自由斗士" },
+        { "name": "其他", "seats": 67, "color": "#666666", "desc": "其他政党" }
+      ],
+      "IRN": [
+        { "name": "Principlists", "seats": 230, "color": "#00843D", "desc": "原则派" },
+        { "name": "Reformists", "seats": 80, "color": "#0066B3", "desc": "改革派" },
+        { "name": "无党派", "seats": 14, "color": "#999999", "desc": "无党派" }
+      ],
+      "ISR": [
+        { "name": "Likud", "seats": 32, "color": "#0038B8", "desc": "利库德集团" },
+        { "name": "Yesh Atid", "seats": 24, "color": "#00A651", "desc": "未来党" },
+        { "name": "Otzma Yehudit", "seats": 6, "color": "#000000", "desc": "犹太力量" },
+        { "name": "Shas", "seats": 11, "color": "#0066B3", "desc": "沙斯党" },
+        { "name": "其他", "seats": 47, "color": "#666666", "desc": "其他政党" }
+      ],
+      "EGY": [
+        { "name": "未来国家党", "seats": 316, "color": "#FF6600", "desc": "未来国家党" },
+        { "name": "共和人民党", "seats": 50, "color": "#E4002B", "desc": "共和人民党" },
+        { "name": "新华夫脱党", "seats": 26, "color": "#0066B3", "desc": "新华夫脱党" },
+        { "name": "其他", "seats": 108, "color": "#666666", "desc": "其他政党" }
+      ],
+      "THA": [
+        { "name": "为泰党", "seats": 141, "color": "#E4002B", "desc": "为泰党" },
+        { "name": "前进党", "seats": 151, "color": "#FF6600", "desc": "前进党" },
+        { "name": "自豪泰党", "seats": 71, "color": "#003366", "desc": "自豪泰党" },
+        { "name": "其他", "seats": 37, "color": "#666666", "desc": "其他政党" }
+      ],
+      "VNM": [
+        { "name": "越南共产党", "seats": 485, "color": "#E4002B", "desc": "越南共产党" },
+        { "name": "无党派", "seats": 14, "color": "#999999", "desc": "无党派" }
+      ],
+      "IDN": [
+        { "name": "PDI-P", "seats": 128, "color": "#E4002B", "desc": "民主斗争党" },
+        { "name": "Golkar", "seats": 85, "color": "#FF6600", "desc": "从业党" },
+        { "name": "Gerindra", "seats": 78, "color": "#003366", "desc": "大印尼运动党" },
+        { "name": "其他", "seats": 209, "color": "#666666", "desc": "其他政党" }
+      ],
+      "PHL": [
+        { "name": "Lakas", "seats": 69, "color": "#003366", "desc": "基督教穆斯林民主力量党" },
+        { "name": "NUP", "seats": 45, "color": "#0066B3", "desc": "民族团结党" },
+        { "name": "NPC", "seats": 36, "color": "#FF6600", "desc": "国家人民联盟" },
+        { "name": "其他", "seats": 83, "color": "#666666", "desc": "其他政党" }
+      ],
+      "UKR": [
+        { "name": "人民公仆", "seats": 240, "color": "#FFD700", "desc": "人民公仆党" },
+        { "name": "欧洲团结", "seats": 27, "color": "#0066B3", "desc": "欧洲团结党" },
+        { "name": "全乌克兰祖国党", "seats": 25, "color": "#009900", "desc": "全乌克兰祖国联盟" },
+        { "name": "无党派", "seats": 48, "color": "#999999", "desc": "无党派" }
+      ],
+      "ROU": [
+        { "name": "PSD", "seats": 110, "color": "#E4002B", "desc": "社会民主党" },
+        { "name": "PNL", "seats": 80, "color": "#FFD700", "desc": "国家自由党" },
+        { "name": "AUR", "seats": 21, "color": "#FFD700", "desc": "罗马尼亚人联盟" },
+        { "name": "其他", "seats": 88, "color": "#666666", "desc": "其他政党" }
+      ],
+      "CZE": [
+        { "name": "ANO", "seats": 72, "color": "#009900", "desc": "不满公民行动" },
+        { "name": "ODS", "seats": 34, "color": "#003366", "desc": "公民民主党" },
+        { "name": "Pirates", "seats": 4, "color": "#000000", "desc": "捷克海盗党" },
+        { "name": "其他", "seats": 90, "color": "#666666", "desc": "其他政党" }
+      ],
+      "HUN": [
+        { "name": "Fidesz", "seats": 114, "color": "#FF6600", "desc": "青民盟" },
+        { "name": "民主联盟", "seats": 15, "color": "#0066B3", "desc": "民主联盟" },
+        { "name": "其他", "seats": 81, "color": "#666666", "desc": "其他政党" }
+      ],
+      "NOR": [
+        { "name": "Ap", "seats": 48, "color": "#E4002B", "desc": "工党" },
+        { "name": "H", "seats": 36, "color": "#003366", "desc": "保守党" },
+        { "name": "FrP", "seats": 21, "color": "#003399", "desc": "进步党" },
+        { "name": "SV", "seats": 13, "color": "#8B0000", "desc": "社会主义左翼党" },
+        { "name": "其他", "seats": 43, "color": "#666666", "desc": "其他政党" }
+      ],
+      "DNK": [
+        { "name": "S", "seats": 50, "color": "#E4002B", "desc": "社会民主党" },
+        { "name": "V", "seats": 43, "color": "#003366", "desc": "自由党" },
+        { "name": "M", "seats": 16, "color": "#003399", "desc": "保守人民党" },
+        { "name": "其他", "seats": 41, "color": "#666666", "desc": "其他政党" }
+      ],
+      "FIN": [
+        { "name": "Kok", "seats": 48, "color": "#003366", "desc": "国家联合党" },
+        { "name": "SDP", "seats": 43, "color": "#E4002B", "desc": "社会民主党" },
+        { "name": "PS", "seats": 46, "color": "#0066B3", "desc": "芬兰人党" },
+        { "name": "Kesk", "seats": 23, "color": "#009900", "desc": "中间党" },
+        { "name": "其他", "seats": 40, "color": "#666666", "desc": "其他政党" }
+      ],
+      "PRT": [
+        { "name": "PS", "seats": 78, "color": "#E4002B", "desc": "社会党" },
+        { "name": "PSD", "seats": 77, "color": "#FF6600", "desc": "社会民主党" },
+        { "name": "CHEGA", "seats": 50, "color": "#003399", "desc": "够了党" },
+        { "name": "其他", "seats": 46, "color": "#666666", "desc": "其他政党" }
+      ],
+      "GRC": [
+        { "name": "ND", "seats": 158, "color": "#003366", "desc": "新民主党" },
+        { "name": "SYRIZA", "seats": 36, "color": "#E4002B", "desc": "激进左翼联盟" },
+        { "name": "PASOK", "seats": 32, "color": "#009900", "desc": "泛希腊社会主义运动" },
+        { "name": "其他", "seats": 24, "color": "#666666", "desc": "其他政党" }
+      ],
+      "SAU": [
+        { "name": "协商会议", "seats": 150, "color": "#006600", "desc": "沙特阿拉伯协商会议" }
+      ],
+      "IRQ": [
+        { "name": "萨德尔运动", "seats": 73, "color": "#006600", "desc": "萨德尔运动" },
+        { "name": "法治国家联盟", "seats": 37, "color": "#003366", "desc": "法治国家联盟" },
+        { "name": "胜利联盟", "seats": 32, "color": "#E4002B", "desc": "胜利联盟" },
+        { "name": "其他", "seats": 108, "color": "#666666", "desc": "其他政党" }
+      ],
+      "JOR": [
+        { "name": "伊斯兰行动阵线", "seats": 16, "color": "#006600", "desc": "伊斯兰行动阵线" },
+        { "name": "约旦统一阵线党", "seats": 15, "color": "#003366", "desc": "约旦统一阵线党" },
+        { "name": "其他", "seats": 89, "color": "#666666", "desc": "其他政党" }
+      ],
+      "LBN": [
+        { "name": "真主党", "seats": 13, "color": "#006600", "desc": "真主党" },
+        { "name": "未来运动", "seats": 19, "color": "#003366", "desc": "未来运动" },
+        { "name": "自由爱国运动", "seats": 18, "color": "#E4002B", "desc": "自由爱国运动" },
+        { "name": "其他", "seats": 40, "color": "#666666", "desc": "其他政党" }
+      ],
+      "PAK": [
+        { "name": "巴基斯坦穆斯林联盟(谢里夫派)", "seats": 129, "color": "#006600", "desc": "巴基斯坦穆斯林联盟(谢里夫派)" },
+        { "name": "巴基斯坦人民党", "seats": 54, "color": "#003366", "desc": "巴基斯坦人民党" },
+        { "name": "正义运动党", "seats": 34, "color": "#E4002B", "desc": "正义运动党" },
+        { "name": "其他", "seats": 83, "color": "#666666", "desc": "其他政党" }
+      ],
+      "BGD": [
+        { "name": "人民联盟", "seats": 302, "color": "#006600", "desc": "人民联盟" },
+        { "name": "孟加拉国民族主义党", "seats": 7, "color": "#003366", "desc": "孟加拉国民族主义党" },
+        { "name": "其他", "seats": 21, "color": "#666666", "desc": "其他政党" }
+      ],
+      "SRI": [
+        { "name": "斯里兰卡人民阵线", "seats": 145, "color": "#006600", "desc": "斯里兰卡人民阵线" },
+        { "name": "统一国民力量", "seats": 54, "color": "#003366", "desc": "统一国民力量" },
+        { "name": "其他", "seats": 31, "color": "#666666", "desc": "其他政党" }
+      ],
+      "MYS": [
+        { "name": "希望联盟", "seats": 82, "color": "#006600", "desc": "希望联盟" },
+        { "name": "国民联盟", "seats": 73, "color": "#003366", "desc": "国民联盟" },
+        { "name": "砂拉越政党联盟", "seats": 31, "color": "#E4002B", "desc": "砂拉越政党联盟" },
+        { "name": "其他", "seats": 4, "color": "#666666", "desc": "其他政党" }
+      ],
+      "SGP": [
+        { "name": "人民行动党", "seats": 83, "color": "#006600", "desc": "人民行动党" },
+        { "name": "工人党", "seats": 10, "color": "#003366", "desc": "工人党" },
+        { "name": "其他", "seats": 2, "color": "#666666", "desc": "其他政党" }
+      ],
+      "ETH": [
+        { "name": "繁荣党", "seats": 510, "color": "#006600", "desc": "繁荣党" },
+        { "name": "其他", "seats": 100, "color": "#666666", "desc": "其他政党" }
+      ],
+      "KEN": [
+        { "name": "联合民主联盟", "seats": 169, "color": "#006600", "desc": "联合民主联盟" },
+        { "name": "橙色民主运动", "seats": 85, "color": "#E4002B", "desc": "橙色民主运动" },
+        { "name": "其他", "seats": 146, "color": "#666666", "desc": "其他政党" }
+      ],
+      "NGR": [
+        { "name": "全体进步大会", "seats": 162, "color": "#006600", "desc": "全体进步大会" },
+        { "name": "人民民主党", "seats": 102, "color": "#003366", "desc": "人民民主党" },
+        { "name": "其他", "seats": 86, "color": "#666666", "desc": "其他政党" }
+      ],
+      "GHA": [
+        { "name": "新爱国党", "seats": 137, "color": "#006600", "desc": "新爱国党" },
+        { "name": "全国民主大会党", "seats": 136, "color": "#003366", "desc": "全国民主大会党" },
+        { "name": "其他", "seats": 7, "color": "#666666", "desc": "其他政党" }
+      ],
+      "CIV": [
+        { "name": "象牙海岸共和人士联盟", "seats": 137, "color": "#006600", "desc": "象牙海岸共和人士联盟" },
+        { "name": "民主和平联盟", "seats": 58, "color": "#003366", "desc": "民主和平联盟" },
+        { "name": "其他", "seats": 45, "color": "#666666", "desc": "其他政党" }
+      ],
+      "RWA": [
+        { "name": "卢旺达爱国阵线", "seats": 40, "color": "#006600", "desc": "卢旺达爱国阵线" },
+        { "name": "社会民主党", "seats": 7, "color": "#003366", "desc": "社会民主党" },
+        { "name": "自由党", "seats": 2, "color": "#E4002B", "desc": "自由党" },
+        { "name": "其他", "seats": 51, "color": "#666666", "desc": "其他政党" }
+      ],
+      "TZA": [
+        { "name": "坦桑尼亚革命党", "seats": 256, "color": "#006600", "desc": "坦桑尼亚革命党" },
+        { "name": "民主发展党", "seats": 19, "color": "#003366", "desc": "民主发展党" },
+        { "name": "其他", "seats": 25, "color": "#666666", "desc": "其他政党" }
+      ],
+      "ZAF": [
+        { "name": "ANC", "seats": 159, "color": "#000000", "desc": "非洲人国民大会" },
+        { "name": "DA", "seats": 87, "color": "#0066B3", "desc": "民主联盟" },
+        { "name": "MK", "seats": 58, "color": "#006600", "desc": "民族之矛党" },
+        { "name": "EFF", "seats": 39, "color": "#E4002B", "desc": "经济自由斗士" },
+        { "name": "其他", "seats": 67, "color": "#666666", "desc": "其他政党" }
+      ],
+      "ZMB": [
+        { "name": "爱国阵线", "seats": 84, "color": "#006600", "desc": "爱国阵线" },
+        { "name": "统一党", "seats": 60, "color": "#003366", "desc": "统一党" },
+        { "name": "其他", "seats": 16, "color": "#666666", "desc": "其他政党" }
+      ],
+      "ZWE": [
+        { "name": "ZANU-PF", "seats": 136, "color": "#006600", "desc": "津巴布韦非洲民族联盟-爱国阵线" },
+        { "name": "争取民主变革运动联盟", "seats": 73, "color": "#003366", "desc": "争取民主变革运动联盟" },
+        { "name": "其他", "seats": 11, "color": "#666666", "desc": "其他政党" }
+      ],
+      "NAM": [
+        { "name": "西南非洲人民组织", "seats": 63, "color": "#006600", "desc": "西南非洲人民组织" },
+        { "name": "民主与进步大会", "seats": 16, "color": "#003366", "desc": "民主与进步大会" },
+        { "name": "其他", "seats": 6, "color": "#666666", "desc": "其他政党" }
+      ],
+      "BWA": [
+        { "name": "博茨瓦纳民主党", "seats": 38, "color": "#006600", "desc": "博茨瓦纳民主党" },
+        { "name": "民主改革联盟", "seats": 15, "color": "#003366", "desc": "民主改革联盟" },
+        { "name": "其他", "seats": 2, "color": "#666666", "desc": "其他政党" }
+      ],
+      "CHL": [
+        { "name": "共和党", "seats": 22, "color": "#00205B", "desc": "极右翼保守派" },
+        { "name": "独立民主联盟", "seats": 23, "color": "#0033A0", "desc": "右翼保守主义" },
+        { "name": "民族革新", "seats": 22, "color": "#005EB8", "desc": "中右翼自由保守派" },
+        { "name": "社会党", "seats": 13, "color": "#D32F2F", "desc": "中左翼社会民主主义" },
+        { "name": "共产党", "seats": 12, "color": "#B71C1C", "desc": "极左翼共产主义" },
+        { "name": "广泛阵线", "seats": 18, "color": "#C2185B", "desc": "左翼进步联盟" },
+        { "name": "其他", "seats": 45, "color": "#666666", "desc": "中间派及其他党派" }
+      ],
+      "COL": [
+        { "name": "历史契约", "seats": 27, "color": "#E53935", "desc": "左翼联盟" },
+        { "name": "自由党", "seats": 33, "color": "#E53935", "desc": "中左翼社会民主主义" },
+        { "name": "保守党", "seats": 27, "color": "#1565C0", "desc": "右翼保守主义" },
+        { "name": "民主中心", "seats": 15, "color": "#0D47A1", "desc": "右翼至极右翼乌里韦主义" },
+        { "name": "U党", "seats": 15, "color": "#F57F17", "desc": "中右翼" },
+        { "name": "其他", "seats": 71, "color": "#666666", "desc": "其他政党" }
+      ],
+      "VEN": [
+        { "name": "PSUV", "seats": 256, "color": "#B71C1C", "desc": "统一社会主义党（执政党）" },
+        { "name": "民主行动党", "seats": 11, "color": "#FFFFFF", "desc": "反对派（受限）" },
+        { "name": "其他", "seats": 10, "color": "#666666", "desc": "其他微小党派" }
+      ],
+      "CUB": [
+        { "name": "古巴共产党", "seats": 470, "color": "#D32F2F", "desc": "全国人民政权代表大会" }
+      ],
+      "PER": [
+        { "name": "人民力量", "seats": 24, "color": "#FF8F00", "desc": "右翼藤森主义" },
+        { "name": "自由秘鲁", "seats": 15, "color": "#D32F2F", "desc": "左翼马克思主义" },
+        { "name": "争取进步联盟", "seats": 14, "color": "#1565C0", "desc": "中右翼" },
+        { "name": "人民行动", "seats": 14, "color": "#EF5350", "desc": "中间派" },
+        { "name": "其他", "seats": 63, "color": "#666666", "desc": "高度碎片化的其他政党" }
+      ],
+      "CHE": [
+        { "name": "SVP/UDC", "seats": 62, "color": "#008000", "desc": "瑞士人民党（右翼民粹）" },
+        { "name": "SP/PS", "seats": 41, "color": "#E53935", "desc": "社会民主党" },
+        { "name": "中间党", "seats": 29, "color": "#F57F17", "desc": "基督教民主主义" },
+        { "name": "FDP/PLR", "seats": 28, "color": "#1E88E5", "desc": "自由民主党" },
+        { "name": "绿党", "seats": 23, "color": "#43A047", "desc": "生态主义" },
+        { "name": "其他", "seats": 17, "color": "#666666", "desc": "绿色自由党及其他" }
+      ],
+      "AUT": [
+        { "name": "FPÖ", "seats": 57, "color": "#005EB8", "desc": "奥地利自由党（极右翼）" },
+        { "name": "ÖVP", "seats": 51, "color": "#000000", "desc": "奥地利人民党（中右翼）" },
+        { "name": "SPÖ", "seats": 41, "color": "#E53935", "desc": "奥地利社会民主党" },
+        { "name": "NEOS", "seats": 18, "color": "#E91E63", "desc": "新奥地利和自由论坛" },
+        { "name": "绿党", "seats": 16, "color": "#43A047", "desc": "生态主义" }
+      ],
+      "BEL": [
+        { "name": "N-VA", "seats": 24, "color": "#FBC02D", "desc": "新弗拉芒联盟" },
+        { "name": "Vlaams Belang", "seats": 20, "color": "#F57F17", "desc": "弗拉芒利益党（极右翼）" },
+        { "name": "MR", "seats": 20, "color": "#1E88E5", "desc": "革新运动" },
+        { "name": "PS", "seats": 16, "color": "#E53935", "desc": "法语社会党" },
+        { "name": "PTB-PVDA", "seats": 15, "color": "#B71C1C", "desc": "比利时工人党" },
+        { "name": "其他", "seats": 55, "color": "#666666", "desc": "其他政党" }
+      ],
+      "IRL": [
+        { "name": "Sinn Féin", "seats": 36, "color": "#008800", "desc": "新芬党" },
+        { "name": "Fianna Fáil", "seats": 38, "color": "#66BB6A", "desc": "共和党" },
+        { "name": "Fine Gael", "seats": 35, "color": "#1E88E5", "desc": "统一党" },
+        { "name": "绿党", "seats": 12, "color": "#43A047", "desc": "生态主义" },
+        { "name": "其他", "seats": 39, "color": "#666666", "desc": "独立议员及其他左翼" }
+      ],
+      "SRB": [
+        { "name": "SNS", "seats": 129, "color": "#1565C0", "desc": "塞尔维亚前进党" },
+        { "name": "SPN", "seats": 65, "color": "#F57F17", "desc": "反暴力联盟（亲欧派）" },
+        { "name": "SPS", "seats": 18, "color": "#D32F2F", "desc": "塞尔维亚社会党" },
+        { "name": "其他", "seats": 38, "color": "#666666", "desc": "右翼及少数族裔政党" }
+      ],
+      "BLR": [
+        { "name": "白俄罗斯", "seats": 51, "color": "#D32F2F", "desc": "亲卢卡申科执政党" },
+        { "name": "效忠派独立议员", "seats": 59, "color": "#666666", "desc": "其余皆为绝对效忠派" }
+      ],
+      "PRK": [
+        { "name": "朝鲜劳动党", "seats": 607, "color": "#B71C1C", "desc": "绝对领导党" },
+        { "name": "社会民主党", "seats": 50, "color": "#E53935", "desc": "统一战线卫星党" },
+        { "name": "天道教青友党", "seats": 22, "color": "#C2185B", "desc": "统一战线卫星党" },
+        { "name": "朝总联", "seats": 8, "color": "#666666", "desc": "海外代表" }
+      ],
+      "TWN": [
+        { "name": "国民党", "seats": 52, "color": "#000095", "desc": "中国国民党（泛蓝阵营）" },
+        { "name": "民进党", "seats": 51, "color": "#1B9431", "desc": "民主进步党（泛绿阵营）" },
+        { "name": "民众党", "seats": 8, "color": "#28C8C8", "desc": "台湾民众党（第三势力）" },
+        { "name": "无党籍", "seats": 2, "color": "#999999", "desc": "泛蓝无党籍" }
+      ],
+      "NZL": [
+        { "name": "国家党", "seats": 49, "color": "#00529F", "desc": "中右翼保守主义" },
+        { "name": "工党", "seats": 34, "color": "#D82A20", "desc": "中左翼社会民主主义" },
+        { "name": "绿党", "seats": 15, "color": "#098137", "desc": "生态主义" },
+        { "name": "行动党", "seats": 11, "color": "#FDE100", "desc": "右翼古典自由主义" },
+        { "name": "优先党", "seats": 8, "color": "#000000", "desc": "右翼民粹主义" },
+        { "name": "毛利党", "seats": 6, "color": "#B31217", "desc": "毛利原住民权利" }
+      ],
+      "KAZ": [
+        { "name": "阿玛纳特党", "seats": 62, "color": "#00B0F0", "desc": "执政党（原祖国之光）" },
+        { "name": "阿吾勒", "seats": 8, "color": "#008000", "desc": "农业人民民主党" },
+        { "name": "光明道路党", "seats": 6, "color": "#0000FF", "desc": "亲政府自由派" },
+        { "name": "其他", "seats": 22, "color": "#666666", "desc": "其他建制派及独立议员" }
+      ],
+      "AFG": [
+        { "name": "塔利班最高委员会", "seats": 100, "color": "#FFFFFF", "desc": "神权统治理事会（无法律意义上的议会）" }
+      ],
+      "DZA": [
+        { "name": "民族解放阵线", "seats": 98, "color": "#006633", "desc": "FLN（长期执政党）" },
+        { "name": "独立议员", "seats": 84, "color": "#999999", "desc": "多数亲体制" },
+        { "name": "争取和平运动", "seats": 65, "color": "#008800", "desc": "温和伊斯兰主义" },
+        { "name": "民族民主联盟", "seats": 58, "color": "#004400", "desc": "亲体制政党" },
+        { "name": "其他", "seats": 102, "color": "#666666", "desc": "其他政党" }
+      ],
+      "MAR": [
+        { "name": "全国自由人士联盟", "seats": 102, "color": "#0072C6", "desc": "亲王室中右翼" },
+        { "name": "真实性与现代党", "seats": 87, "color": "#0033A0", "desc": "亲王室政党" },
+        { "name": "独立党", "seats": 81, "color": "#F5A623", "desc": "保守民族主义" },
+        { "name": "社会主义人民力量", "seats": 34, "color": "#D32F2F", "desc": "社会民主主义" },
+        { "name": "其他", "seats": 91, "color": "#666666", "desc": "其他政党" }
+      ],
+      "SDN": [
+        { "name": "苏丹武装部队/过渡主权委员会", "seats": 100, "color": "#333333", "desc": "军方掌权状态（议会解散，内战状态）" }
+      ],
+      "KWT": [
+        { "name": "民选反对派/独立议员", "seats": 30, "color": "#F5A623", "desc": "经常与内阁冲突的民选代表" },
+        { "name": "亲王室/建制派", "seats": 20, "color": "#0072C6", "desc": "支持执政家族的议员" }
+      ],
+      "BOL": [
+        { "name": "MAS", "seats": 75, "color": "#0055A4", "desc": "争取社会主义运动" },
+        { "name": "CC", "seats": 39, "color": "#FF7F00", "desc": "公民共同体" },
+        { "name": "Creemos", "seats": 16, "color": "#FF0000", "desc": "我们相信联盟" }
+      ],
+      "ECU": [
+        { "name": "RC", "seats": 52, "color": "#00A2D3", "desc": "公民革命运动（左翼）" },
+        { "name": "Construye", "seats": 29, "color": "#2B3990", "desc": "建设运动（中间派）" },
+        { "name": "PSC", "seats": 18, "color": "#FCDC09", "desc": "社会基督教党（右翼）" },
+        { "name": "ADN", "seats": 14, "color": "#5E2146", "desc": "全国民主行动（总统所在党）" },
+        { "name": "其他", "seats": 24, "color": "#666666", "desc": "其他小党与独立议员" }
+      ],
+      "URY": [
+        { "name": "广泛阵线", "seats": 42, "color": "#0033A0", "desc": "左翼大联盟" },
+        { "name": "国民党", "seats": 30, "color": "#0080FF", "desc": "中右翼保守党" },
+        { "name": "红党", "seats": 13, "color": "#FF0000", "desc": "中右翼自由派" },
+        { "name": "其他", "seats": 14, "color": "#666666", "desc": "卡比尔多党等其他政党" }
+      ],
+      "BGR": [
+        { "name": "GERB-SDS", "seats": 69, "color": "#005B9F", "desc": "欧洲发展公民党联盟" },
+        { "name": "PP-DB", "seats": 64, "color": "#004A80", "desc": "我们继续变革-民主保加利亚" },
+        { "name": "复兴党", "seats": 37, "color": "#000000", "desc": "极右翼民族主义" },
+        { "name": "DPS", "seats": 36, "color": "#0055A4", "desc": "争取权利和自由运动" },
+        { "name": "BSP", "seats": 23, "color": "#E3000F", "desc": "保加利亚社会党" },
+        { "name": "其他", "seats": 11, "color": "#666666", "desc": "其他政党" }
+      ],
+      "HRV": [
+        { "name": "HDZ", "seats": 61, "color": "#005BAA", "desc": "克罗地亚民主共同体" },
+        { "name": "SDP", "seats": 42, "color": "#ED1C24", "desc": "社会民主党" },
+        { "name": "DP", "seats": 14, "color": "#000000", "desc": "家乡运动" },
+        { "name": "Most", "seats": 11, "color": "#FF9900", "desc": "桥党" },
+        { "name": "其他", "seats": 23, "color": "#666666", "desc": "其他政党及少数族裔代表" }
+      ],
+      "LTU": [
+        { "name": "TS-LKD", "seats": 50, "color": "#0054A6", "desc": "祖国联盟-立陶宛基督教民主党" },
+        { "name": "LVŽS", "seats": 32, "color": "#00A05A", "desc": "立陶宛农民与绿党联盟" },
+        { "name": "LSDP", "seats": 13, "color": "#E3000F", "desc": "立陶宛社会民主党" },
+        { "name": "DSVL", "seats": 14, "color": "#003366", "desc": "“为了立陶宛”民主党" },
+        { "name": "其他", "seats": 32, "color": "#666666", "desc": "其他政党" }
+      ],
+      "UZB": [
+        { "name": "UzLiDeP", "seats": 53, "color": "#0052A5", "desc": "乌兹别克斯坦自由民主党" },
+        { "name": "民族复兴", "seats": 36, "color": "#009900", "desc": "民族复兴民主党" },
+        { "name": "公正党", "seats": 24, "color": "#E3000F", "desc": "“公正”社会民主党" },
+        { "name": "其他", "seats": 37, "color": "#666666", "desc": "人民民主党及生态党" }
+      ],
+      "GEO": [
+        { "name": "格鲁吉亚梦想", "seats": 84, "color": "#2353A4", "desc": "执政党（务实/偏俄）" },
+        { "name": "UNM", "seats": 30, "color": "#E3000F", "desc": "统一民族运动（亲欧反对派）" },
+        { "name": "为了格鲁吉亚", "seats": 6, "color": "#003366", "desc": "中右翼" },
+        { "name": "其他", "seats": 30, "color": "#666666", "desc": "其他政党" }
+      ],
+      "AZE": [
+        { "name": "YAP", "seats": 70, "color": "#0052A5", "desc": "新阿塞拜疆党（阿利耶夫执政党）" },
+        { "name": "亲政府独立议员", "seats": 41, "color": "#999999", "desc": "无党籍（实质支持政府）" },
+        { "name": "其他", "seats": 14, "color": "#666666", "desc": "微小卫星党" }
+      ],
+      "ARM": [
+        { "name": "公民契约", "seats": 71, "color": "#000000", "desc": "帕希尼扬执政党" },
+        { "name": "亚美尼亚联盟", "seats": 29, "color": "#D32F2F", "desc": "反对派联盟" },
+        { "name": "我有荣幸", "seats": 7, "color": "#0033A0", "desc": "保守反对派联盟" }
+      ],
+      "MNG": [
+        { "name": "MPP", "seats": 62, "color": "#E3000F", "desc": "蒙古人民党" },
+        { "name": "DP", "seats": 11, "color": "#0054A6", "desc": "民主党" },
+        { "name": "HUN", "seats": 1, "color": "#009900", "desc": "国家劳动党" },
+        { "name": "其他", "seats": 2, "color": "#666666", "desc": "独立议员" }
+      ],
+      "NPL": [
+        { "name": "尼泊尔大会党", "seats": 89, "color": "#0033A0", "desc": "中左翼社会民主主义" },
+        { "name": "尼共(联合马列)", "seats": 78, "color": "#E3000F", "desc": "共产主义/马列主义" },
+        { "name": "尼共(毛中心)", "seats": 32, "color": "#B71C1C", "desc": "毛派共产主义" },
+        { "name": "民族独立党", "seats": 21, "color": "#000000", "desc": "民粹主义新势力" },
+        { "name": "其他", "seats": 55, "color": "#666666", "desc": "其他政党" }
+      ],
+      "AGO": [
+        { "name": "MPLA", "seats": 124, "color": "#E3000F", "desc": "安哥拉人民解放运动" },
+        { "name": "UNITA", "seats": 90, "color": "#009900", "desc": "争取安哥拉彻底独立全国联盟" },
+        { "name": "PRS", "seats": 2, "color": "#FFFF00", "desc": "社会复兴党" },
+        { "name": "其他", "seats": 4, "color": "#666666", "desc": "其他政党" }
+      ],
+      "SOM": [
+        { "name": "联邦议会代表", "seats": 275, "color": "#666666", "desc": "按“4.5部族公式”分配的议员" }
+      ],
+      "MLI": [
+        { "name": "CNT", "seats": 121, "color": "#333333", "desc": "全国过渡委员会（军方指派）" }
+      ]
+    };
+
+    const LOCAL_COUNTRY_DESCRIPTIONS = {
+      "USA": "美国仍是自由世界的经济与军事支柱：硅谷的创新能力、华尔街的资本流动、好莱坞的文化输出——这些优势尚未消散。然而两党将国会撕裂为势均力敌的两半，社会的极化已深入街区与餐桌，最高法院的每一次判决都可能引爆新的撕裂。若民主制度在喧嚣中失去自我修复的能力，这个曾经照亮世界的灯塔，将如何照亮自己的前路？",
+      "CHN": "十四亿人口的庞大市场、世界工厂的制造能力、高铁与数字支付的基建——中国的崛起曾被视为二十一世纪的奇迹。但权力高度集中于一党，人大代表整齐举手的画面与政治局常委会密室决策的现实形成讽刺对照；房地产泡沫、地方债务、人口老龄化的阴影正在积聚。这个庞然大物能否在维持稳定的同时完成转型？未来充满变数。",
+      "RUS": "广袤的国土、丰富的油气资源、继承自苏联的核武库——俄罗斯仍是不可忽视的力量。但强人统治下的杜马不过是橡皮图章，真正的决定在克里姆林宫深处做出；制裁与战争已将经济拖入泥潭，年轻人才外流，与西方的对立日益固化。昔日的超级大国在迷失中寻找定位，而寒冬或许才刚刚开始。",
+      "DEU": "欧盟的经济引擎、精密的制造业、战后的民主奇迹——德国曾是稳定的象征。然而极右翼在议会中席位数暴涨，魏玛的幽灵若隐若现；能源转型的阵痛、移民融入的争议、与法国主导欧洲的分歧，正在侵蚀共识。若主流政党无法回应民众的焦虑，民主的堡垒会不会从内部出现裂缝？",
+      "GBR": "伦敦的金融中心、牛津剑桥的学术传统、英语世界的文化影响力——英国的家底仍在。但脱欧的余波未平，苏格兰与北爱尔兰的离心力与日俱增，工党大胜后的蜜月期能持续多久尚未可知。联合王国的未来悬而未决，威斯敏斯特的钟声能否继续为统一的王国敲响？",
+      "FRA": "核大国地位、欧盟核心、文化与软实力——法国依旧骄傲。然而三个阵营在国民议会中鼎立，没有绝对多数，第五共和国的体制正在前所未有的分裂中运转；养老金改革引发的街头怒火、郊区移民的隔阂、极右翼的步步紧逼，让巴黎的光环蒙上阴影。共和国能否在撕裂中找到新的平衡？",
+      "JPN": "第三大经济体、尖端科技、秩序井然的社会——日本曾是不可撼动的标杆。但自民党首次失去议会多数，一党主导的时代或许终结；少子老龄化以惊人的速度侵蚀着劳动力，与中韩的关系紧张，夹在中美之间的地缘困境日益凸显。天皇的国度正在未知的水域中寻找新的航向。",
+      "ITA": "G7成员、欧洲第三大经济体、无与伦比的文化遗产——意大利的家底不容小觑。右翼联盟执政下的罗马，墨索里尼故乡的民主实验在继续；北方与南方的鸿沟、堆积如山的公共债务、黑手党的阴影、五星运动与传统政党的博弈——政坛的风向标总在摆动。欧洲的南方大门能否守住稳定？",
+      "ESP": "旅游天堂、再生能源先驱、拉美与欧洲的桥梁——西班牙有其独特的优势。但左右分裂的议会、加泰罗尼亚与巴斯克的独立诉求、失业率尤其是青年失业的痼疾、极右翼的抬头，让马德里与巴塞罗那的对话充满张力。佛朗哥的遗产早已褪色，但共识的建立依旧艰难。",
+      "IND": "世界上最大的民主国家、年轻的人口、蓬勃的科技业——印度被寄予厚望。人民党主导的议会里，宗教民族主义与世俗多元主义的张力显而易见；种姓制度的阴影、贫富悬殊、与巴基斯坦的世仇、国内的宗教冲突，都在考验这个多元国家的韧性。新德里的喧嚣能否转化为持久的繁荣？",
+      "BRA": "亚马逊雨林、农业大国、拉美最大的市场——巴西的潜力毋庸置疑。然而卢拉与博索纳罗支持者在街头的对立、国会里脆弱而善变的联盟、雨林砍伐与土著权利、贫民窟的暴力与腐败丑闻，让里约的阳光遮不住政治的阴霾。南美的巨人能否走出反复的动荡循环？",
+      "CAN": "广袤的国土、丰富的资源、多元包容的社会——加拿大是西方世界的优等生。自由党与保守党轮替，魁北克的分裂主义虽已式微却从未消失，住房危机与生活成本上涨正在侵蚀中产的安全感。渥太华的冷静与南邻的喧嚣形成对比，但这样的安宁能否在变局中延续？",
+      "AUS": "矿产与农业的富庶、稳定的制度、多元的移民社会——澳大利亚曾是最幸运的国度。工党执政，但气候变化引发的火灾与洪水、土著权利的历史债务、对华关系的微妙、住房可负担性的崩塌，正在撕裂共识。从悉尼到珀斯，幸运之国的光环能否抵挡日益增加的不确定性？",
+      "KOR": "三星与现代、K-pop与韩流、半导体产业链的关键节点——韩国的软硬实力令人侧目。但半岛分裂的伤口从未愈合，共同民主党与国民力量的对抗折射着整个民族的身份焦虑；低生育率、财阀与普通人的鸿沟、与朝鲜的军事对峙。首尔的霓虹灯下，统一的梦想与现实的沉重交织。",
+      "NLD": "鹿特丹港口、郁金香与风车、宽容的社会传统——荷兰曾是自由的标杆。极右翼崛起，组阁谈判旷日持久，移民与本土的张力、住房危机、氮排放引发的农民抗议，让阿姆斯特丹的自由主义传统承受着民粹主义的压力。郁金香之国能否在撕裂中守住开放的价值？",
+      "SWE": "北欧福利模式的旗舰、宜家与爱立信、高生活质量——瑞典曾是社会民主的典范。社会民主党与极右翼的对峙打破了长期的政治宁静；移民融合的争议、治安问题的发酵、加入北约后的战略转向。斯德哥尔摩的福利国家正在危机中重新定义自己，未来充满变数。",
+      "POL": "中东欧最大经济体、欧盟东扩的成功故事、坚韧的民族——波兰的崛起令人瞩目。法律与公正党主导的华沙，在法治与主权之间与布鲁塞尔角力；司法改革的争议、与乌克兰的微妙关系、历史问题的争论。从格但斯克到克拉科夫，历史的重量仍在，前路并不平坦。",
+      "TUR": "横跨两洲的战略要地、北约第二大军队、新兴市场——土耳其的地位独特。埃尔多安长期执政，正义与发展党掌控议会，世俗与宗教的界线早已模糊；通胀肆虐、里拉暴跌、库尔德问题的纠结、与西方的若即若离。伊斯坦布尔横跨欧亚，而安卡拉的权力实验将把国家带向何方？",
+      "MEX": "拉美第二大经济体、毗邻美国的地缘、丰富的文化遗产——墨西哥的潜力巨大。国家复兴运动主导的墨西哥城，毒品战争与移民危机交织，洛佩斯总统的\"第四次变革\"在争议中推进；贩毒集团暴力、腐败痼疾、与美国的复杂关系。坎昆的阳光与华雷斯的血泊形成残酷对照。",
+      "ARG": "潘帕斯的粮仓、受过良好教育的人口、深厚的文化底蕴——阿根廷本不该如此挣扎。自由主义者米莱入主玫瑰宫，休克疗法的实验正在撕裂社会；比索的命运与改革的成败紧紧绑定，通货膨胀与贫困率居高不下。南美的粮仓能否在又一次轮回中找到出路？",
+      "ZAF": "非洲最发达的经济体、丰富的矿产、曼德拉留下的和解遗产——南非曾充满希望。ANC 失去议会绝对多数，腐败与不平等侵蚀着彩虹之国的色彩；电力危机、失业率居高、种族矛盾的暗流。从开普敦到约翰内斯堡，曼德拉的遗产能否在重重挑战中得到传承？",
+      "IRN": "波斯文明、石油储备、战略要地——伊朗的分量不容忽视。神权与民意在角力，原则派控制议会，但街头的年轻面孔用沉默和选票表达不满；制裁下的经济困顿、与以色列的敌对、核问题的悬而未决。德黑兰的穹顶下，变革的种子在发芽，但春天何时到来无人知晓。",
+      "ISR": "高科技创新的热土、强大的军事实力、犹太民族的家园——以色列的成就令人惊叹。内塔尼亚胡时代终结后的耶路撒冷，利库德与未来党的对峙持续；加沙的阴影、定居点问题、国内世俗与宗教的撕裂。和平的曙光似乎从未如此遥远，而战争与冲突的循环何时能破？",
+      "EGY": "古文明的摇篮、苏伊士运河、阿拉伯世界的人口中心——埃及的战略地位无可替代。塞西将军的铁腕维持着稳定，军方与民选机构的关系微妙；经济困境、人口爆炸、与埃塞俄比亚的水权之争。开罗的尼罗河畔，稳定与自由的平衡从未简单，未来在迷雾中若隐若现。",
+      "THA": "东南亚的枢纽、旅游天堂、王室与佛教的传统——泰国有其独特的魅力。王室、军方与民选政府的三方博弈从未停歇，为泰党与前进党的较量在曼谷街头和议会走廊同时上演；年轻一代对改革的渴望与保守势力的反弹形成拉锯。微笑之国的未来，远非表面那般平静。",
+      "VNM": "制造业新星、年轻劳动力、改革的活力——越南是东盟的亮点。共产党一统天下，胡志明市与河内的改革派与保守派在党内角力；与中国的复杂关系、南海争端、政治开放的限度。西贡的昔日繁华已是另一番光景，而新的繁荣能否带来更多的自由？",
+      "IDN": "世界第四人口大国、东盟的核心、多元的群岛国度——印度尼西亚的分量日增。民主斗争党主导的雅加达，伊斯兰与世俗的张力在东南亚最大的穆斯林国家中可见一斑；基础设施的短板、宗教保守主义的抬头、首都迁都的雄心。万岛之国的民主实验仍在进行中。",
+      "PHL": "年轻的人口、海外劳工的汇款、英语优势——菲律宾有其增长潜力。马科斯家族重返马拉卡南宫，马尼拉的民主在家族政治与民粹主义中挣扎；南海争端、贫困与不平等、EDSA 革命的记忆正在模糊。这个曾被殖民又拥抱民主的国度，将走向何方？",
+      "UKR": "黑土地、军工遗产、坚韧的人民——乌克兰在战火中展现了令人敬佩的意志。泽连斯基的人民公仆党领导着抵抗，基辅的议会与战壕同样关键；重建的巨额成本、腐败的痼疾、西方援助的不确定性。战争终将结束，但和平后的乌克兰将如何重建？",
+      "ROU": "欧盟成员、黑海沿岸、IT 外包的热土——罗马尼亚在追赶中前进。社会民主党与自由党的拉锯持续，布加勒斯特的腐败丑闻与欧盟基金交织；司法改革的争议、人口外流、与匈牙利的关系。东欧的民主仍在成长，但成长的过程充满阵痛。",
+      "CZE": "中欧的工业心脏、人均GDP领先、相对稳定的制度——捷克曾被视为转型典范。不满公民行动的崛起撼动了布拉格，ANO 与传统的左右翼形成新格局；与欧盟的摩擦、俄乌战争的冲击、社会的老龄化。中欧的心脏跳动不已，但心律未必齐整。",
+      "HUN": "欧尔班主导的布达佩斯，\"非自由民主\"的实验已持续多年；青民盟掌控议会，与布鲁塞尔的关系紧张。经济的韧性、对移民的强硬、向东看的战略——匈牙利的道路独树一帜。这样的实验能否长期持续？欧盟的耐心正在消耗。",
+      "NOR": "石油财富、主权财富基金、高福利——挪威是资源型国家的典范。石油富国的绿色转型在奥斯陆推进，工党与保守党博弈；北海的黑金终将枯竭，北极的冰雪融化带来机遇与地缘风险。北欧的石油王国能否成功转身？",
+      "DNK": "社会民主党领导的哥本哈根，福利国家与移民政策的争论撕裂着这个维京后裔的国度；严格的移民政策与包容价值观的张力、对欧盟的怀疑。丹麦模式能否在多元化的压力下维持？",
+      "FIN": "加入北约后的赫尔辛基，与莫斯科的关系从未如此微妙；教育领先、科技发达、林业与造纸的根基——芬兰有其优势。与俄罗斯的漫长边界、冬季战争的记忆、能源的转型。北欧的东线前哨，正站在地缘博弈的前沿。",
+      "PRT": "够了党的崛起震撼里斯本，社会党与社民党的老牌对决遭遇民粹主义的冲击；债务危机的创伤、旅游业依赖、年轻人口的流失。伊比利亚半岛的西端，正在寻找新的方向。",
+      "GRC": "新民主党主导的雅典，债务危机的创伤尚未痊愈；爱琴海的碧波与布鲁塞尔的紧箍咒同样真实。旅游业的复苏、债务的阴影、与土耳其的紧张。西方文明的摇篮，能否在二十一世纪重拾荣光？",
+      "SAU": "石油财富、伊斯兰圣城、海湾地区的领导者——沙特阿拉伯的影响力不容小觑。王储穆罕默德的改革正在改变这个保守的王国，从允许女性开车到发展旅游业；但权力高度集中于王室，什叶派与逊尼派的教派分歧，与伊朗的地区竞争。利雅得的摩天大楼与沙漠的传统并存，这个石油王国的未来充满变数。",
+      "IRQ": "美索不达米亚文明的摇篮、丰富的石油资源、地缘政治的十字路口——伊拉克的命运多舛。什叶派主导的政府，库尔德人的自治，逊尼派的边缘化，教派矛盾与恐怖主义的阴影；战后重建的艰难，与邻国的复杂关系。巴格达的古迹与现代的混乱交织，这个国家能否走出动荡？",
+      "SYR": "古老的文明、战略要地、持续的冲突——叙利亚的悲剧仍在继续。巴沙尔政权控制着大部分领土，但战争的创伤难以愈合；难民危机、经济崩溃、国际社会的干预。大马士革的历史与战争的废墟并存，这个国家的未来在何方？",
+      "YEM": "阿拉伯半岛的贫困角落、持续的内战、人道主义危机——也门的苦难令人痛心。胡塞武装与沙特领导的联军对峙，粮食短缺与疾病流行；外部势力的干预，和平谈判的艰难。萨那的古老建筑与战争的破坏形成鲜明对比，这个国家何时才能迎来和平？",
+      "LBN": "中东的金融中心、多元的社会、脆弱的政治平衡——黎巴嫩在崩溃的边缘。教派政治的僵局，经济的崩溃，贝鲁特港爆炸的创伤；与叙利亚的复杂关系， Hezbollah的影响力。贝鲁特的曾经繁华与现在的混乱，这个国家能否找到重生之路？",
+      "JOR": "哈希姆王朝的延续、相对稳定的绿洲、约旦河的重要性——约旦在动荡的地区中寻求平衡。君主制的稳定，巴勒斯坦难民的负担，与以色列的和平协议；经济的挑战，水资源的短缺。安曼的现代化与沙漠的传统并存，这个国家如何在地区动荡中保持稳定？",
+      "KWT": "石油财富、福利国家、海湾合作委员会的成员——科威特在财富中寻求平衡。君主制的稳定，议会与王室的权力平衡，石油依赖的经济；与伊拉克的历史恩怨，地区安全的挑战。科威特城的摩天大楼与沙漠的广阔，这个石油国家的未来如何？",
+      "ARE": "沙漠中的奇迹、全球金融中心、多元的社会——阿联酋的崛起令人惊叹。阿布扎比的石油财富，迪拜的商业帝国，现代化的愿景；君主制的稳定，外籍劳工的问题，地区安全的角色。迪拜的摩天大楼与沙漠的传统，这个国家如何保持增长？",
+      "QAT": "天然气财富、世界杯举办国、地区影响力的崛起——卡塔尔的故事引人注目。君主制的稳定，天然气依赖的经济，半岛电视台的全球影响力；与邻国的外交危机，世界杯的成功举办。多哈的现代化与传统的融合，这个国家如何在地区中发挥更大作用？",
+      "OMN": "香料之路的历史、战略要地、现代化的努力——阿曼在海湾地区独树一帜。苏丹的稳定统治，中立的外交政策，经济多元化的尝试；地理位置的重要性，与伊朗的关系。马斯喀特的古老港口与现代的发展，这个国家如何在变化中保持平衡？",
+      "PAK": "南亚的核国家、庞大的人口、与印度的长期对峙——巴基斯坦的挑战巨大。伊斯兰堡的政治动荡，军方的影响力，经济的困境；克什米尔的争端，恐怖主义的威胁。拉合尔的文化与卡拉奇的活力，这个国家如何实现稳定与发展？",
+      "BGD": "恒河三角洲的国家、庞大的人口、经济的崛起——孟加拉国正在改变形象。达卡的拥挤与活力， garment industry的繁荣，气候变化的威胁；政治的稳定，与印度的关系。这个国家如何在人口压力与发展需求中找到平衡？",
+      "SRI": "印度洋的明珠、多元的社会、战后的重建——斯里兰卡正在恢复。科伦坡的发展，泰米尔与僧伽罗的和解，经济的挑战；债务危机的影响，旅游业的恢复。这个岛国如何在和平中实现繁荣？",
+      "MYA": "东南亚的隐士、丰富的资源、政治的变迁——缅甸的未来充满不确定性。军政府的统治，民主运动的抵抗，罗兴亚人的危机；资源的开发，与邻国的关系。仰光的 colonial architecture与现代的冲突，这个国家何时才能实现民主与稳定？",
+      "CAM": "吴哥窟的所在地、经济的增长、政治的挑战——柬埔寨在发展中前行。洪森的长期统治，民主的局限性，经济的增长；旅游业的重要性，与泰国的关系。金边的发展与暹粒的文化，这个国家如何在稳定与改革中平衡？",
+      "LAO": "东南亚的内陆国家、水电资源、发展的挑战——老挝在追赶中前进。一党制的稳定，经济的增长，基础设施的建设；与中国的关系，环境的挑战。万象的宁静与乡村的传统，这个国家如何实现可持续发展？",
+      "VTM": "东南亚的小国、经济的开放、政治的稳定——越南的邻居正在崛起。一党制的统治，经济的增长，与东盟的合作；地理位置的重要性，与中国的关系。这个国家如何在地区竞争中找到自己的位置？",
+      "MYS": "多元的社会、经济的发展、政治的变迁——马来西亚在转型中。马来人、华人、印度人的多元社会，经济的多元化，政治的民主化；与新加坡的竞争，与印尼的合作。吉隆坡的摩天大楼与槟城的文化，这个国家如何实现和谐与发展？",
+      "SGP": "城市国家、经济的奇迹、高效的治理——新加坡是亚洲的典范。李光耀的遗产，经济的多元化，教育的成功；与马来西亚的关系，地区安全的角色。这个小红点如何在大国博弈中保持独立与繁荣？",
+      "BRN": "石油财富、伊斯兰君主制、小而富的国家——文莱在平静中发展。苏丹的统治，石油依赖的经济，福利国家的模式；与东盟的合作，宗教的保守性。这个国家如何在变化的世界中保持稳定？",
+      "KHM": "东南亚的古老王国、红色高棉的历史、重建的努力——柬埔寨在恢复中。洪森的统治，经济的增长，旅游业的发展；红色高棉的遗产，与泰国的边界争端。吴哥窟的辉煌与现代的挑战，这个国家如何走向未来？",
+      "MDG": "非洲的岛国、独特的生态、发展的挑战——马达加斯加在寻求发展。塔那那利佛的政治，独特的生物多样性，经济的依赖；贫困的挑战，环境保护的重要性。这个岛国如何在发展与保护中找到平衡？",
+      "ETH": "非洲之角的大国、古老的文明、发展的潜力——埃塞俄比亚正在崛起。阿比总理的改革，经济的增长，基础设施的建设；与埃及的水权争端，民族矛盾的挑战。亚的斯亚贝巴的发展与拉里贝拉的教堂，这个国家如何实现统一与繁荣？",
+      "KEN": "东非的经济引擎、野生生物的天堂、政治的挑战——肯尼亚在发展中。内罗毕的现代化，旅游业的重要性，经济的增长；政治的腐败，部落的矛盾。这个国家如何在发展与治理中找到平衡？",
+      "NGR": "非洲人口最多的国家、石油资源、复杂的社会——尼日利亚的潜力与挑战并存。拉各斯的活力，石油依赖的经济，宗教与部落的矛盾；博科圣地的威胁，腐败的问题。这个国家如何实现团结与发展？",
+      "GHA": "西非的稳定国家、黄金资源、民主的实践——加纳是非洲的希望。阿克拉的发展，可可与黄金的出口，民主的巩固；经济的挑战，青年的失业。这个国家如何在民主与发展中继续前进？",
+      "CIV": "西非的经济大国、可可出口、政治的稳定——科特迪瓦正在恢复。阿比让的活力，可可产业的重要性，政治的和解；经济的发展，社会的融合。这个国家如何在和平中实现繁荣？",
+      "MRT": "西非的小国、花生生产、政治的稳定——马里在挑战中前行。巴马科的文化，农业的重要性，恐怖主义的威胁；国际社会的干预，政治的稳定。这个国家如何在安全与发展中找到平衡？",
+      "SEN": "西非的稳定国家、旅游资源、民主的实践——塞内加尔是地区的典范。达喀尔的活力，旅游业的发展，民主的巩固；经济的挑战，青年的失业。这个国家如何在发展与治理中继续前进？",
+      "GMB": "西非的小国、渔业资源、政治的稳定——冈比亚在发展中。班珠尔的平静，渔业的重要性，经济的挑战；与邻国的关系，民主的实践。这个国家如何在有限的资源中实现发展？",
+      "GUI": "西非的国家、铝土矿资源、政治的稳定——几内亚在发展中。科纳克里的活力，铝土矿的出口，经济的挑战；政治的稳定，与邻国的关系。这个国家如何在资源开发与可持续发展中找到平衡？",
+      "LBR": "西非的国家、钻石资源、战后的重建——利比里亚在恢复中。蒙罗维亚的重建，钻石产业的重要性，和平的巩固；经济的挑战，社会的重建。这个国家如何在和平中实现发展？",
+      "SLE": "西非的国家、钻石资源、战后的重建——塞拉利昂在恢复中。弗里敦的重建，钻石产业的重要性，和平的巩固；经济的挑战，社会的重建。这个国家如何在和平中实现发展？",
+      "TOG": "西非的小国、农业经济、政治的稳定——多哥在发展中。洛美的港口，农业的重要性，经济的挑战；政治的稳定，与邻国的关系。这个国家如何在有限的资源中实现发展？",
+      "BEN": "西非的国家、农业经济、政治的稳定——贝宁在发展中。科托努的港口，农业的重要性，经济的挑战；政治的稳定，与邻国的关系。这个国家如何在有限的资源中实现发展？",
+      "NIG": "西非的国家、农业经济、政治的稳定——尼日尔在挑战中前行。尼亚美的发展，农业的重要性，沙漠化的威胁；政治的稳定，与邻国的关系。这个国家如何在环境挑战中实现发展？",
+      "CHD": "中非的国家、石油资源、政治的动荡——乍得在挑战中前行。恩贾梅纳的发展，石油的出口，政治的不稳定；部落的矛盾，与邻国的关系。这个国家如何在稳定与发展中找到平衡？",
+      "CAF": "中非的国家、资源丰富、政治的动荡——中非共和国在危机中。班吉的混乱，资源的丰富，政治的不稳定；冲突的持续，人道主义危机。这个国家如何在和平与发展中找到出路？",
+      "COD": "中非的大国、资源丰富、冲突不断——刚果民主共和国的挑战巨大。金沙萨的混乱，矿产的丰富，冲突的持续；人道主义危机，国际社会的干预。这个国家如何在资源开发与和平中找到平衡？",
+      "RWA": "东非的小国、 genocide的历史、重建的奇迹——卢旺达的故事令人鼓舞。基加利的整洁， genocide的记忆，经济的增长；民族团结的努力，与邻国的关系。这个国家如何在历史的阴影中实现繁荣？",
+      "BDI": "东非的小国、农业经济、政治的稳定——布隆迪在发展中。布琼布拉的平静，农业的重要性，经济的挑战；政治的稳定，与邻国的关系。这个国家如何在有限的资源中实现发展？",
+      "UGA": "东非的国家、农业经济、政治的稳定——乌干达在发展中。坎帕拉的活力，农业的重要性，经济的增长；穆塞韦尼的长期统治，民主的挑战。这个国家如何在稳定与改革中找到平衡？",
+      "TZA": "东非的大国、农业经济、政治的稳定——坦桑尼亚在发展中。达累斯萨拉姆的活力，农业的重要性，经济的增长；政治的稳定，与邻国的关系。这个国家如何在发展与环境保护中找到平衡？",
+      "ZMB": "南部非洲的国家、铜资源、经济的挑战——赞比亚在转型中。卢萨卡的发展，铜的出口，经济的多元化；政治的稳定，与邻国的关系。这个国家如何在资源依赖与经济多元化中找到平衡？",
+      "ZWE": "南部非洲的国家、农业资源、经济的挑战——津巴布韦在转型中。哈拉雷的发展，农业的重要性，经济的困境；政治的变革，与邻国的关系。这个国家如何在经济恢复与政治稳定中找到平衡？",
+      "NAM": "南部非洲的国家、矿产资源、政治的稳定——纳米比亚在发展中。温得和克的整洁，矿产的出口，经济的多元化；政治的稳定，与邻国的关系。这个国家如何在资源开发与可持续发展中找到平衡？",
+      "BWA": "南部非洲的国家、钻石资源、政治的稳定——博茨瓦纳是非洲的成功故事。哈博罗内的发展，钻石的出口，经济的多元化；政治的稳定，与邻国的关系。这个国家如何在资源依赖与经济多元化中找到平衡？",
+      "LSO": "南部非洲的小国、农业经济、政治的稳定——莱索托在发展中。马塞卢的平静，农业的重要性，经济的挑战；政治的稳定，与南非的关系。这个国家如何在有限的资源中实现发展？",
+      "SWZ": "南部非洲的小国、农业经济、君主制的统治——斯威士兰在传统与现代中平衡。姆巴巴内的发展，农业的重要性，政治的保守性；与邻国的关系，经济的挑战。这个国家如何在传统与发展中找到平衡？",
+      "CHL": "安第斯山脉的狭长国度曾是新自由主义的实验室。然而，社会不平等的暗流最终引爆了街头的怒火。新宪法的难产与左右翼的极化对立，让圣地亚哥的政治钟摆在绝望与激进间剧烈摇摆。皮诺切特的幽灵仍未远去，而变革者已在现实的高墙前碰壁。铜矿的财富未能抚平社会的裂痕，智利的未来依旧在迷雾中穿行。",
+      "COL": "毒品卡特尔的阴影、游击队的余烬、深植的社会不平等——哥伦比亚的历史是一部暴力与抗争的交响曲。波哥大的权力走廊里，旧势力的根基依然深厚；亚马逊的砍伐与农村的贫困考验着和平协议的脆弱底线。这片魔幻现实主义的土地，仍在寻找真正的平静。",
+      "VEN": "拥有世界最大的石油储量，却陷入了史无前例的崩溃。加拉加斯的权力依旧被牢牢掌控，制裁、恶性通胀与数百万人的逃离掏空了国家的元气。反对派的抗争在铁腕与疲惫中式微。在这个被黑金诅咒的国度，玻利瓦尔革命的余辉只剩下空洞的口号与黯淡的街灯。",
+      "CUB": "加勒比海的红色堡垒，革命元勋的时代已经落幕。面对长达半个多世纪的封锁，哈瓦那的街头依然行驶着斑驳的老爷车；然而，互联网的微光与年轻一代的觉醒正静水流深地冲击着体制。物资短缺依旧是日常，在这个时间仿佛停滞的岛屿上，变革的暗流已被不可避免地激活。",
+      "PER": "安第斯山脉的动荡之源。频繁的总统弹劾与抗议让利马的总统府走马灯般更换主人。原住民的边缘化与首都精英的割裂，让整个国家陷入长期的政治瘫痪。印加帝国的后裔们在腐败与通胀中挣扎，找不到能够统合国家的基石。",
+      "CHE": "阿尔卑斯山脉中的中立堡垒，全球隐秘财富的最终避风港。伯尔尼的直接民主与共识政治让它在动荡的欧洲维持着令人艳羡的超然。然而，随着地缘政治重塑与大国竞争加剧，保持绝对中立的代价日益高昂；对移民的警惕与西方制裁体系的施压，正逐渐侵蚀这个山地联邦的古老基石。",
+      "AUT": "曾经的哈布斯堡帝国中心，如今在欧洲的十字路口徘徊。维也纳的古典荣光难掩政治的右转，极右翼的崛起让传统政党的共识摇摇欲坠。通胀的压力、能源的焦虑、以及对移民的排斥，正重塑着这个国家的政治版图。中立的承诺在战火纷飞的欧洲显得愈发微妙。",
+      "BEL": "欧盟的心脏，却也是一个在分裂边缘摇摇欲坠的王国。弗拉芒人与瓦隆人的语言与经济鸿沟，让布鲁塞尔的组阁往往演变为漫长而痛苦的马拉松。移民聚居区的治安恶化与极右翼的逼近，考验着这个复杂联邦的生存韧性。",
+      "IRL": "昔日的凯尔特之虎，依靠低税率吸引了全球科技巨头的驻扎。但在跨国公司的光鲜数据背后，是普通人难以承受的住房危机与公共服务短缺。随着新芬党的崛起与英国脱欧的余波，爱尔兰统一的幽灵再次在岛上游荡，挑战着现有的政治格局。",
+      "SRB": "巴尔干半岛的火药桶余烬未熄。贝尔格莱德的政客们在布鲁塞尔的资本与莫斯科的传统友谊间走着危险的钢丝。科索沃的伤疤不时作痛，大塞尔维亚的民族主义幽灵仍在街头游荡。夹在东西方新冷战的断层线上，巴尔干之虎的咆哮中夹杂着深深的无力感。",
+      "BLR": "欧洲最后的铁幕残影。明斯克在2020年的动荡后，国家的命运已与莫斯科深度且不可逆地绑定。西方的极限制裁与经济的停滞让这里成为冷战前线的活化石。在这个被时间遗忘的角落，任何变革的希望都被重重冰封。",
+      "PRK": "三八线以北的隐士王国，绝对的统治在核武器的冷光中固若金汤。平壤的阅兵式展示着令人生畏的导弹，而国家却在极限制裁与孤立中艰难维系。在这个信息真空的国度，震耳欲聋的口号掩盖了真实的饥寒。它是冷战遗留的最后一块冰川。",
+      "TWN": "东亚地缘政治的最前线，全球半导体产业链的脆弱心脏。台北的民主活力与海峡对岸庞大的军事压力形成令人窒息的对比。两大阵营的博弈交织着深层的焦虑；在这个西太平洋的“不沉航母”上，维持现状的钢丝正变得越来越细，阴云时刻牵动着世界的神经。",
+      "NZL": "南太平洋的宁静岛国，以其清新的自然与进步的政治著称。然而，惠灵顿也未能幸免于全球化的阵痛。通货膨胀、住房危机以及对原住民权利的争论，让这个被视为避风港的国家出现了裂痕。在逃避世界喧嚣的同时，他们发现自己仍被卷入了太平洋的大国博弈之中。",
+      "KAZ": "中亚广袤的草原之国，处于俄罗斯与中国两大巨头之间。“一月风暴”的余波让阿斯塔纳试图在旧有寡头与新秩序间寻找平衡；丰富的油气资源是其立足的筹码，但地缘政治的压力如影随形。未来的命运，取决于能否在多极世界中维持精妙的走钢丝艺术。",
+      "AFG": "帝国的坟场。二十年的战争与西方强加的民主实验最终以喀布尔的仓皇撤退告终。塔利班重新入主，将国家拉回了神权统治的严冬。经济崩溃、女性被从公共生活中抹除、国际社会的彻底孤立；这片饱受蹂躏的干旱土地，依然被军阀、宗教与无尽的贫困死死绑架。",
+      "DZA": "北非的能源巨头。阿尔及尔的军方与政治精英构成的“体制”依然掌控着国家的命脉。丰富的天然气使其在欧洲能源危机中获得了极大的筹码，但国内居高不下的青年失业率与对自由的渴望，始终是这片沙漠之下的暗流。",
+      "MAR": "扼守直布罗陀海峡的王国。拉巴特的王室维持着微妙的平衡，在传统与现代化转型中稳步推进。对西撒哈拉的控制强化了其民族主义叙事，但城乡差距、干旱带来的农业危机，以及周边地缘的紧张局势，仍是悬在头顶的达摩克利斯之剑。",
+      "SDN": "尼罗河畔的悲歌。短暂的文官政府实验在枪炮声中灰飞烟灭，苏丹武装部队与快速支援部队的血腥内战让喀土穆沦为废墟。无数平民流离失所，国家在军阀的割据与外部势力的干涉中四分五裂，和平似乎遥不可及。",
+      "BOL": "安第斯山脉的内陆国。拥有世界最大的锂矿储量，却深陷左翼内部的权力斗争。莫拉莱斯的幽灵与现政府的决裂，让拉巴斯的街头再次成为抗议的海洋。资源民族主义未能带来普遍繁荣，反而成为了新地缘博弈的筹码。",
+      "ECU": "赤道之国正经历前所未有的治安危机。曾经相对平静的避风港，如今沦为跨国贩毒集团的火并战场。基多的政客们在频繁的弹劾与提前大选中疲于奔命，而瓜亚基尔的港口则被暴力阴影笼罩。铁腕手段能带来短暂的平静，但难以根除深层的溃烂。",
+      "URY": "南美的瑞士，罕见的稳定绿洲。在周围邻国陷入民粹与动荡的漩涡时，蒙得维的亚依然保持着令人羡慕的民主韧性与高福利体系。然而，人口老龄化与经济增长的瓶颈，正在悄然考验着这套温和共识政治的极限。",
+      "BGR": "巴尔干的边缘，欧盟最贫穷的成员国。索菲亚的政坛陷入了无休止的选举循环，破碎的议会与根深蒂固的寡头腐败让任何改革尝试都举步维艰。亲俄的情结与对欧洲资金的依赖，让这个国家在新冷战的裂痕中左右为难。",
+      "HRV": "亚得里亚海的明珠，依靠绝美的海岸线吸引着全欧洲的游客。但在旅游业繁荣的表象下，是年轻劳动力的持续外流和对单一经济的严重依赖。萨格勒布的右翼政府在融入欧元区后显得更加自信，但巴尔干战争的旧伤疤依然在社会的潜意识中隐隐作痛。",
+      "LTU": "波罗的海的坚定前哨。面对东部巨大的地缘压力，维尔纽斯选择了最强硬的姿态，不仅是北约的积极先锋，更在远东外交上频频触碰大国的逆鳞。这种不对称的强硬赢得了西方的赞誉，但也让这个小国时刻处于如履薄冰的高度紧张之中。",
+      "UZB": "中亚的心脏地带，人口最多的共和国。在经历了漫长的封闭与铁腕统治后，塔什干正在推行谨慎的“新乌兹别克斯坦”改革。国门渐开，外资涌入，但在光鲜的基建背后，权力的逻辑并未发生根本性改变。它在俄罗斯、中国与西方之间游刃有余，试图重现丝绸之路的荣光。",
+      "GEO": "高加索的破碎阳台。第比利斯的街头永远不缺挥舞欧盟旗帜的抗议者，但执政党“格鲁吉亚梦想”却在务实与亲俄的边缘危险试探。阿布哈兹与南奥塞梯的伤口依旧流血，欧洲的梦想与地缘的现实在这里激烈碰撞，撕裂着这个盛产美酒的国度。",
+      "AZE": "里海的火焰之国。凭借丰厚的油气收入与土耳其的鼎力支持，巴库在纳卡战争中以压倒性的军事优势重塑了高加索的版图。阿利耶夫家族的统治固若金汤，但在民族主义的狂欢褪去后，如何在中俄伊三大地缘巨头之间维持战略平衡，将是新的考验。",
+      "ARM": "亚拉拉特山阴影下的悲情国度。接连的军事挫败与领土丧失，让埃里温陷入了深深的集体创伤。传统的保护伞俄罗斯显得冷漠而无力，向西方靠拢的尝试又远水解不了近渴。在这个强敌环伺的高加索孤岛上，生存本身就已经耗尽了所有的力气。",
+      "MNG": "夹在中俄两大核邻国之间的广袤草原。乌兰巴托的政客们精通“第三邻国”外交，试图用民主体制和矿产资源吸引美欧的目光以对冲地缘压力。然而，煤炭腐败丑闻不时点燃民众的怒火，极度依赖邻国港口与能源的现实，让这个游牧民族的后裔难以真正快马扬鞭。",
+      "NPL": "喜马拉雅山麓的内陆佛国。加德满都的政局如同山间的季风般变幻莫测，共产党各派系与国大党之间的权力游戏循环往复。它小心翼翼地在印度与中国两个大国之间寻找平衡，但贫困、青年外流以及基础设施的落后，让这座雪山之国的现代化之路步履维艰。",
+      "AGO": "西南非的石油巨兽。漫长的内战虽然已经远去，但罗安达的光鲜摩天大楼与郊区无边无际的贫民窟形成了刺眼的对比。执政党MPLA紧紧把控着石油美元的流向，尽管新总统试图推行反腐与改革，但既得利益集团的根基深不可测，底层民众依然在黑金的诅咒中挣扎。",
+      "SOM": "几乎成为“失败国家”代名词的非洲之角。摩加迪沙的中央政府犹如脆弱的孤岛，勉强在非盟维和部队的保护下运转。青年党的恐怖袭击如影随形，地方部族武装割据一方，索马里兰的实质独立更是让国家统一遥遥无期。在这片干旱的土地上，无政府状态的幽灵依然盘旋。",
+      "MLI": "萨赫勒地带的动荡风暴眼。连续的军事政变让巴马科与西方彻底决裂，法国驻军黯然撤离，取而代之的是俄罗斯瓦格纳雇佣兵的冷酷身影。北部的图阿雷格分裂势力与极端伊斯兰武装依然在广袤的沙漠中肆虐。军政府试图用激进的主权叙事掩盖安全局势的崩坏，但前路依旧一片血红。"
+    };
+    const LOCAL_COUNTRY_DESCRIPTIONS_EN = {
+      "USA": "The US remains the economic and military pillar of the free world: Silicon Valley's innovation, Wall Street's capital flows, and Hollywood's cultural exports—these advantages have not yet dissipated. However, the two-party system has torn Congress into evenly matched halves, social polarization has penetrated neighborhoods and dining tables, and every Supreme Court ruling threatens to ignite new divisions. If the democratic system loses its self-healing ability amidst the clamor, how will this beacon that once illuminated the world light its own path?",
+      "CHN": "A massive market of 1.4 billion people, the manufacturing capacity of the world's factory, high-speed rail, and digital payment infrastructure—China's rise was once seen as the miracle of the 21st century. But power is highly concentrated in one party, and the image of People's Congress deputies raising their hands in unison forms an ironic contrast with the reality of closed-door decision-making by the Politburo Standing Committee; the real estate bubble, local debt, and the shadow of an aging population are gathering. Can this behemoth complete its transition while maintaining stability? The future is full of variables.",
+      "RUS": "Vast territory, abundant oil and gas resources, and a nuclear arsenal inherited from the Soviet Union—Russia remains a force to be reckoned with. But the Duma under strongman rule is merely a rubber stamp, with real decisions made deep within the Kremlin; sanctions and war have dragged the economy into a quagmire, young talent is draining away, and opposition to the West is increasingly solidifying. The former superpower is searching for its position in the wilderness, and the harsh winter may have just begun.",
+      "DEU": "The economic engine of the EU, precision manufacturing, and the post-war democratic miracle—Germany was once a symbol of stability. However, the far-right has seen a surge in parliamentary seats, and the ghost of Weimar looms faintly; the growing pains of the energy transition, controversies over immigrant integration, and divergences with France over leading Europe are eroding consensus. If mainstream parties fail to address public anxiety, will the fortress of democracy crack from within?",
+      "GBR": "London's financial center, the academic traditions of Oxford and Cambridge, and the cultural influence of the Anglosphere—Britain's foundation remains. But the aftermath of Brexit has yet to settle, the centrifugal forces of Scotland and Northern Ireland are growing day by day, and how long the honeymoon period after the Labour Party's landslide victory will last remains unknown. The future of the United Kingdom hangs in the balance; can the bells of Westminster continue to toll for a united kingdom?",
+      "FRA": "Nuclear power status, the core of the EU, culture, and soft power—France remains proud. However, three camps stand divided in the National Assembly with no absolute majority, and the institutions of the Fifth Republic are operating amidst unprecedented fragmentation; street anger sparked by pension reforms, the alienation of suburban immigrants, and the steady advance of the far-right cast a shadow over Paris's halo. Can the Republic find a new balance amidst the tearing?",
+      "JPN": "The third-largest economy, cutting-edge technology, and a well-ordered society—Japan was once an unshakable benchmark. But the LDP has lost its parliamentary majority for the first time, and the era of one-party dominance may be ending; an aging population with low birth rates is eroding the labor force at an alarming speed, relations with China and South Korea are tense, and the geopolitical dilemma caught between China and the US is becoming increasingly prominent. The Emperor's nation is searching for a new course in uncharted waters.",
+      "ITA": "A G7 member, Europe's third-largest economy, and unparalleled cultural heritage—Italy's foundation cannot be underestimated. Under the right-wing coalition's rule in Rome, the democratic experiment in Mussolini's homeland continues; the chasm between North and South, a mountain of public debt, the shadow of the Mafia, and the games between the Five Star Movement and traditional parties—the political weathervane is always swinging. Can Europe's southern gate hold onto stability?",
+      "ESP": "A tourist paradise, a pioneer in renewable energy, and a bridge between Latin America and Europe—Spain has its unique advantages. But a parliament split between left and right, the independence demands of Catalonia and the Basque Country, the chronic illness of unemployment (especially youth unemployment), and the rise of the far-right fill the dialogue between Madrid and Barcelona with tension. Franco's legacy has long faded, but building consensus remains arduous.",
+      "IND": "The world's largest democracy, a young population, and a booming tech industry—India is pinned with high hopes. In the BJP-dominated parliament, the tension between religious nationalism and secular pluralism is evident; the shadow of the caste system, extreme wealth disparity, the blood feud with Pakistan, and domestic religious conflicts are all testing the resilience of this diverse nation. Can New Delhi's clamor be transformed into lasting prosperity?",
+      "BRA": "The Amazon rainforest, an agricultural powerhouse, and Latin America's largest market—Brazil's potential is unquestionable. However, the street clashes between supporters of Lula and Bolsonaro, fragile and fickle alliances in Congress, deforestation versus indigenous rights, and the violence and corruption scandals in the favelas mean that Rio's sunshine cannot hide the political gloom. Can the South American giant break free from its recurring cycle of turmoil?",
+      "CAN": "Vast territory, abundant resources, and a diverse, inclusive society—Canada is the straight-A student of the Western world. Liberals and Conservatives alternate in power, and while Quebec separatism has waned, it has never truly disappeared; the housing crisis and rising cost of living are eroding the middle class's sense of security. Ottawa's calm contrasts with the clamor of its southern neighbor, but can such tranquility endure amidst global shifts?",
+      "AUS": "Rich in minerals and agriculture, stable institutions, and a diverse immigrant society—Australia was once the 'Lucky Country'. Labor is in power, but climate change-induced fires and floods, historical debts regarding indigenous rights, subtle relations with China, and the collapse of housing affordability are tearing at the consensus. From Sydney to Perth, can the halo of the lucky country withstand the mounting uncertainties?",
+      "KOR": "Samsung and Hyundai, K-pop and the Korean Wave, a crucial node in the semiconductor supply chain—South Korea's hard and soft power are remarkable. But the wound of the peninsula's division has never healed, and the confrontation between the Democratic Party and the People Power Party reflects the identity anxiety of an entire nation; low birth rates, the chasm between chaebols and ordinary people, and the military standoff with North Korea. Under Seoul's neon lights, the dream of unification intertwines with the weight of reality.",
+      "NLD": "The Port of Rotterdam, tulips and windmills, and a tradition of a tolerant society—the Netherlands was once a beacon of liberalism. The rise of the far-right, protracted cabinet formation negotiations, tensions between immigrants and natives, the housing crisis, and farmer protests triggered by nitrogen emissions are putting Amsterdam's liberal traditions under populist pressure. Can the land of tulips defend its open values amidst the fragmentation?",
+      "SWE": "The flagship of the Nordic welfare model, IKEA and Ericsson, and a high quality of life—Sweden was once the paradigm of social democracy. The standoff between the Social Democrats and the far-right has shattered long-standing political tranquility; controversies over immigrant integration, brewing security issues, and the strategic shift after joining NATO. Stockholm's welfare state is redefining itself in crisis, and the future is full of variables.",
+      "POL": "The largest economy in Central and Eastern Europe, the success story of EU eastward expansion, and a resilient nation—Poland's rise is striking. Warsaw, dominated by the Law and Justice party, wrestles with Brussels over the rule of law versus sovereignty; controversies over judicial reform, delicate relations with Ukraine, and debates over historical issues. From Gdańsk to Kraków, the weight of history remains, and the road ahead is not smooth.",
+      "TUR": "A strategic chokepoint spanning two continents, NATO's second-largest army, and an emerging market—Turkey's position is unique. Erdogan has ruled for a long time, the AKP controls parliament, and the lines between secularism and religion have long blurred; raging inflation, a plunging Lira, the entanglement of the Kurdish issue, and a hot-and-cold relationship with the West. Istanbul spans Eurasia, but where will Ankara's power experiment lead the nation?",
+      "MEX": "Latin America's second-largest economy, geopolitically adjacent to the US, and rich in cultural heritage—Mexico has massive potential. Mexico City, dominated by MORENA, intertwines with the drug war and the immigration crisis, as the President's 'Fourth Transformation' advances amidst controversy; cartel violence, chronic corruption, and complex relations with the US. Cancún's sunshine forms a cruel contrast with the blood pools of Juárez.",
+      "ARG": "The granary of the Pampas, a well-educated population, and profound cultural heritage—Argentina shouldn't be struggling like this. The libertarian Milei has entered the Casa Rosada, and the shock therapy experiment is tearing society apart; the fate of the peso is tightly bound to the success or failure of reforms, while inflation and poverty rates remain stubbornly high. Can South America's granary find a way out in yet another cycle?",
+      "ZAF": "Africa's most developed economy, rich in minerals, and the legacy of reconciliation left by Mandela—South Africa was once full of hope. The ANC has lost its absolute parliamentary majority; corruption and inequality are eroding the colors of the Rainbow Nation; power crises, high unemployment, and the undercurrents of racial tension. From Cape Town to Johannesburg, can Mandela's legacy be passed down through overwhelming challenges?",
+      "IRN": "Persian civilization, oil reserves, and a strategic location—Iran's weight cannot be ignored. Theocracy and popular will are wrestling; principlists control parliament, but young faces on the streets express their dissatisfaction through silence and votes; economic hardship under sanctions, hostility with Israel, and the unresolved nuclear issue. Beneath the domes of Tehran, the seeds of change are sprouting, but no one knows when spring will arrive.",
+      "ISR": "A hotbed for high-tech innovation, powerful military strength, and the homeland of the Jewish people—Israel's achievements are astonishing. In the post-Netanyahu era in Jerusalem, the standoff between Likud and Yesh Atid continues; the shadow of Gaza, the settlement issue, and the domestic tear between the secular and the religious. The dawn of peace seems further away than ever, and when will the cycle of war and conflict be broken?",
+      "EGY": "The cradle of ancient civilization, the Suez Canal, and the demographic center of the Arab world—Egypt's strategic position is irreplaceable. General Sisi's iron fist maintains stability, and the relationship between the military and elected institutions is delicate; economic woes, a population explosion, and the water rights dispute with Ethiopia. By Cairo's Nile, balancing stability and freedom has never been simple; the future looms in the mist.",
+      "THA": "The hub of Southeast Asia, a tourist paradise, and traditions of monarchy and Buddhism—Thailand has its unique charm. The three-way game between the monarchy, the military, and the elected government never ceases, as the contest between Pheu Thai and Move Forward plays out simultaneously on Bangkok's streets and in parliamentary corridors; the young generation's thirst for reform and the conservative establishment's backlash form a tug-of-war. The Land of Smiles' future is far from as peaceful as it appears.",
+      "VNM": "A rising star in manufacturing, a young labor force, and the vitality of reform—Vietnam is the bright spot of ASEAN. The Communist Party rules absolutely; reformists and conservatives in Ho Chi Minh City and Hanoi wrestle within the party; complex relations with China, South China Sea disputes, and the limits of political openness. The former bustle of Saigon presents a different scene today, but will new prosperity bring more freedom?",
+      "IDN": "The world's fourth most populous country, the core of ASEAN, and a diverse archipelagic nation—Indonesia's weight grows daily. In Jakarta, dominated by the PDI-P, the tension between Islam and secularism is evident in Southeast Asia's largest Muslim nation; infrastructure shortfalls, the rise of religious conservatism, and the ambition of relocating the capital. The democratic experiment of the nation of ten thousand islands is still ongoing.",
+      "PHL": "A young population, remittances from overseas workers, and an English-language advantage—the Philippines has growth potential. The Marcos family has returned to Malacañang Palace; Manila's democracy struggles between family politics and populism; South China Sea disputes, poverty and inequality, and the fading memories of the EDSA Revolution. Where is this once-colonized nation that embraced democracy heading?",
+      "UKR": "Black soil, a military-industrial legacy, and a resilient people—Ukraine has shown admirable will amidst the flames of war. Zelensky's Servant of the People party leads the resistance; Kyiv's parliament and the trenches are equally critical; the massive cost of reconstruction, the chronic illness of corruption, and the uncertainty of Western aid. The war will eventually end, but how will the post-war Ukraine be rebuilt?",
+      "ROU": "EU member, Black Sea coast, and a hotbed for IT outsourcing—Romania is advancing as it catches up. The tug-of-war between the Social Democrats and Liberals continues; Bucharest's corruption scandals intertwine with EU funds; controversies over judicial reform, population drain, and relations with Hungary. Eastern Europe's democracy is still growing, but the process is full of growing pains.",
+      "CZE": "The industrial heart of Central Europe, leading GDP per capita, and relatively stable institutions—the Czech Republic was once seen as a model of transition. The rise of Action of Dissatisfied Citizens (ANO) shook Prague, forming a new landscape with traditional left and right wings; friction with the EU, the impact of the Russo-Ukrainian war, and social aging. The heart of Central Europe beats endlessly, but its rhythm is not always steady.",
+      "HUN": "In Orban-dominated Budapest, the experiment of 'illiberal democracy' has continued for years; Fidesz controls parliament, and relations with Brussels are tense. Economic resilience, a hardline stance on immigration, and a 'Look East' strategy—Hungary's path is unique. Can such an experiment last long-term? The EU's patience is wearing thin.",
+      "NOR": "Oil wealth, a sovereign wealth fund, and high welfare—Norway is the paradigm of a resource-rich state. The oil-rich nation's green transition advances in Oslo, with the Labor and Conservative parties wrestling; the North Sea's black gold will eventually dry up, and the melting Arctic ice brings opportunities and geopolitical risks. Can the Nordic oil kingdom turn around successfully?",
+      "DNK": "In Social Democrat-led Copenhagen, debates over the welfare state and immigration policy tear at this nation of Viking descendants; the tension between strict immigration policies and inclusive values, and skepticism towards the EU. Can the Danish model be maintained under the pressure of diversification?",
+      "FIN": "In Helsinki after joining NATO, relations with Moscow have never been more delicate; leading education, advanced tech, and the roots of forestry and paper—Finland has its advantages. The long border with Russia, memories of the Winter War, and energy transition. The Nordic's eastern outpost stands at the forefront of the geopolitical chessboard.",
+      "PRT": "The rise of the Chega party shocked Lisbon, as the traditional duel between the Socialists and Social Democrats met the impact of populism; the trauma of the debt crisis, reliance on tourism, and the drain of young demographics. The western tip of the Iberian Peninsula is searching for a new direction.",
+      "GRC": "In Athens, dominated by New Democracy, the wounds of the debt crisis have not yet fully healed; the blue waves of the Aegean Sea and Brussels' tight grip are equally real. The recovery of tourism, the shadow of debt, and tensions with Turkey. Can the cradle of Western civilization regain its glory in the 21st century?",
+      "SAU": "Oil wealth, the holy cities of Islam, and the leader of the Gulf region—Saudi Arabia's influence is indisputable. Crown Prince Mohammed's reforms are changing this conservative kingdom, from allowing women to drive to developing tourism; but power is highly concentrated in the royal family, the sectarian divide between Shia and Sunni, and regional competition with Iran. Riyadh's skyscrapers coexist with desert traditions, and the future of this oil kingdom is full of variables.",
+      "IRQ": "The cradle of Mesopotamian civilization, abundant oil resources, and a geopolitical crossroads—Iraq's fate is ill-starred. A Shia-dominated government, Kurdish autonomy, Sunni marginalization, and the shadow of sectarian conflicts and terrorism; the difficulty of post-war reconstruction and complex relations with neighbors. Baghdad's ancient ruins intertwine with modern chaos; can this country emerge from the turmoil?",
+      "SYR": "An ancient civilization, a strategic location, and ongoing conflict—Syria's tragedy continues. The Assad regime controls most of the territory, but the wounds of war are hard to heal; the refugee crisis, economic collapse, and international intervention. Damascus's history coexists with the ruins of war; where does the future of this country lie?",
+      "YEM": "The impoverished corner of the Arabian Peninsula, an ongoing civil war, and a humanitarian crisis—Yemen's suffering is heartbreaking. The Houthis face off against the Saudi-led coalition; food shortages and rampant disease; external intervention and the difficulty of peace talks. Sana'a's ancient architecture contrasts sharply with the destruction of war; when will this country see peace?",
+      "LBN": "The financial center of the Middle East, a diverse society, and a fragile political balance—Lebanon is on the brink of collapse. The deadlock of sectarian politics, economic collapse, and the trauma of the Beirut port explosion; complex relations with Syria and the influence of Hezbollah. Beirut's former prosperity and current chaos; can this country find a path to rebirth?",
+      "JOR": "The continuation of the Hashemite dynasty, a relatively stable oasis, and the importance of the Jordan River—Jordan seeks balance in a turbulent region. The stability of the monarchy, the burden of Palestinian refugees, and the peace treaty with Israel; economic challenges and water shortages. Amman's modernization coexists with desert traditions; how does this country maintain stability amid regional upheaval?",
+      "KWT": "Oil wealth, a welfare state, and a member of the GCC—Kuwait seeks balance in wealth. The stability of the monarchy, the balance of power between parliament and the royal family, and an oil-dependent economy; historical grievances with Iraq and the challenges of regional security. Kuwait City's skyscrapers and the vast desert; what is the future of this oil state?",
+      "ARE": "A miracle in the desert, a global financial center, and a diverse society—the UAE's rise is astonishing. Abu Dhabi's oil wealth, Dubai's commercial empire, and a vision of modernization; the stability of the monarchy, the issue of foreign labor, and its role in regional security. Dubai's skyscrapers and desert traditions; how does this country sustain growth?",
+      "QAT": "Natural gas wealth, World Cup host, and a rising regional influence—Qatar's story is compelling. The stability of the monarchy, a gas-dependent economy, and the global influence of Al Jazeera; the diplomatic crisis with neighbors and the successful hosting of the World Cup. Doha's modernization and traditional integration; how can this country play a greater role in the region?",
+      "OMN": "The history of the Spice Route, a strategic location, and efforts at modernization—Oman stands unique in the Gulf region. The Sultan's stable rule, a neutral foreign policy, and attempts at economic diversification; the importance of its geographical location and relations with Iran. Muscat's ancient port and modern development; how does this country maintain balance amidst change?",
+      "PAK": "A nuclear state in South Asia, a massive population, and a long-term standoff with India—Pakistan's challenges are immense. Political turmoil in Islamabad, the military's influence, and economic woes; the Kashmir dispute and the threat of terrorism. Lahore's culture and Karachi's vitality; how can this country achieve stability and development?",
+      "BGD": "A nation of the Ganges Delta, a huge population, and economic rise—Bangladesh is changing its image. The crowding and vitality of Dhaka, the boom of the garment industry, and the threat of climate change; political stability and relations with India. How does this country find a balance between population pressure and development needs?",
+      "SRI": "The pearl of the Indian Ocean, a diverse society, and post-war reconstruction—Sri Lanka is recovering. Colombo's development, reconciliation between Tamils and Sinhalese, and economic challenges; the impact of the debt crisis and the recovery of tourism. How does this island nation achieve prosperity in peace?",
+      "MYA": "The hermit of Southeast Asia, abundant resources, and political shifts—Myanmar's future is full of uncertainty. The junta's rule, the resistance of the democratic movement, and the Rohingya crisis; resource exploitation and relations with neighbors. Yangon's colonial architecture and modern conflicts; when will this country achieve democracy and stability?",
+      "CAM": "Home to Angkor Wat, economic growth, and political challenges—Cambodia is moving forward in development. Hun Sen's long rule, the limitations of democracy, and economic growth; the importance of tourism and relations with Thailand. Phnom Penh's development and Siem Reap's culture; how does this country balance stability and reform?",
+      "LAO": "The landlocked nation of Southeast Asia, hydropower resources, and developmental challenges—Laos is advancing to catch up. The stability of one-party rule, economic growth, and infrastructure construction; relations with China and environmental challenges. Vientiane's tranquility and rural traditions; how does this country achieve sustainable development?",
+      "VTM": "A small country in Southeast Asia, economic openness, and political stability—Vietnam's neighbor is rising. One-party rule, economic growth, and cooperation with ASEAN; the importance of geographical location and relations with China. How does this country find its place in regional competition?",
+      "MYS": "A diverse society, economic development, and political shifts—Malaysia is in transition. The diverse society of Malays, Chinese, and Indians, economic diversification, and political democratization; competition with Singapore and cooperation with Indonesia. Kuala Lumpur's skyscrapers and Penang's culture; how does this country achieve harmony and development?",
+      "SGP": "A city-state, an economic miracle, and highly efficient governance—Singapore is the paradigm of Asia. Lee Kuan Yew's legacy, economic diversification, and educational success; relations with Malaysia and its role in regional security. How does this little red dot maintain independence and prosperity amidst great power games?",
+      "BRN": "Oil wealth, an Islamic monarchy, and a small but rich nation—Brunei develops in peace. The Sultan's rule, an oil-dependent economy, and the welfare state model; cooperation with ASEAN and religious conservatism. How does this country maintain stability in a changing world?",
+      "KHM": "An ancient kingdom in Southeast Asia, the history of the Khmer Rouge, and reconstruction efforts—Cambodia is recovering. Hun Sen's rule, economic growth, and tourism development; the legacy of the Khmer Rouge and border disputes with Thailand. The glory of Angkor Wat and modern challenges; how does this country move toward the future?",
+      "MDG": "An island nation in Africa, unique ecology, and developmental challenges—Madagascar seeks development. The politics of Antananarivo, unique biodiversity, and economic dependence; the challenge of poverty and the importance of environmental protection. How does this island nation find a balance between development and conservation?",
+      "ETH": "A major power in the Horn of Africa, an ancient civilization, and developmental potential—Ethiopia is rising. Prime Minister Abiy's reforms, economic growth, and infrastructure construction; the water rights dispute with Egypt and the challenge of ethnic conflicts. The development of Addis Ababa and the churches of Lalibela; how does this country achieve unity and prosperity?",
+      "KEN": "The economic engine of East Africa, a paradise for wildlife, and political challenges—Kenya is developing. Nairobi's modernization, the importance of tourism, and economic growth; political corruption and tribal conflicts. How does this country find a balance between development and governance?",
+      "NGR": "Africa's most populous nation, oil resources, and a complex society—Nigeria's potential and challenges coexist. Lagos's vitality, an oil-dependent economy, and religious and tribal conflicts; the threat of Boko Haram and the problem of corruption. How does this country achieve unity and development?",
+      "GHA": "A stable country in West Africa, gold resources, and democratic practice—Ghana is the hope of Africa. Accra's development, cocoa and gold exports, and democratic consolidation; economic challenges and youth unemployment. How does this country continue to advance in democracy and development?",
+      "CIV": "A major economic power in West Africa, cocoa exports, and political stability—Côte d'Ivoire is recovering. Abidjan's vitality, the importance of the cocoa industry, and political reconciliation; economic development and social integration. How does this country achieve prosperity in peace?",
+      "MRT": "A small country in West Africa, peanut production, and political stability—Mali is moving forward amidst challenges. Bamako's culture, the importance of agriculture, and the threat of terrorism; international intervention and political stability. How does this country find a balance between security and development?",
+      "SEN": "A stable country in West Africa, tourism resources, and democratic practice—Senegal is a model for the region. Dakar's vitality, tourism development, and democratic consolidation; economic challenges and youth unemployment. How does this country continue to advance in development and governance?",
+      "GMB": "A small country in West Africa, fishery resources, and political stability—The Gambia is developing. Banjul's tranquility, the importance of fisheries, and economic challenges; relations with neighbors and democratic practice. How does this country achieve development with limited resources?",
+      "GUI": "A country in West Africa, bauxite resources, and political stability—Guinea is developing. Conakry's vitality, bauxite exports, and economic challenges; political stability and relations with neighbors. How does this country find a balance between resource exploitation and sustainable development?",
+      "LBR": "A country in West Africa, diamond resources, and post-war reconstruction—Liberia is recovering. Monrovia's reconstruction, the importance of the diamond industry, and the consolidation of peace; economic challenges and social reconstruction. How does this country achieve development in peace?",
+      "SLE": "A country in West Africa, diamond resources, and post-war reconstruction—Sierra Leone is recovering. Freetown's reconstruction, the importance of the diamond industry, and the consolidation of peace; economic challenges and social reconstruction. How does this country achieve development in peace?",
+      "TOG": "A small country in West Africa, agricultural economy, and political stability—Togo is developing. Lomé's port, the importance of agriculture, and economic challenges; political stability and relations with neighbors. How does this country achieve development with limited resources?",
+      "BEN": "A country in West Africa, agricultural economy, and political stability—Benin is developing. Cotonou's port, the importance of agriculture, and economic challenges; political stability and relations with neighbors. How does this country achieve development with limited resources?",
+      "NIG": "A country in West Africa, agricultural economy, and political stability—Niger is moving forward amidst challenges. Niamey's development, the importance of agriculture, and the threat of desertification; political stability and relations with neighbors. How does this country achieve development amidst environmental challenges?",
+      "CHD": "A country in Central Africa, oil resources, and political turmoil—Chad is moving forward amidst challenges. N'Djamena's development, oil exports, and political instability; tribal conflicts and relations with neighbors. How does this country find a balance between stability and development?",
+      "CAF": "A country in Central Africa, rich resources, and political turmoil—The Central African Republic is in crisis. Bangui's chaos, rich resources, and political instability; ongoing conflicts and a humanitarian crisis. How does this country find a way out for peace and development?",
+      "COD": "A major power in Central Africa, rich resources, and continuous conflict—The Democratic Republic of the Congo faces immense challenges. Kinshasa's chaos, abundant minerals, and ongoing conflict; a humanitarian crisis and international intervention. How does this country find a balance between resource exploitation and peace?",
+      "RWA": "A small country in East Africa, a history of genocide, and a miracle of reconstruction—Rwanda's story is inspiring. Kigali's cleanliness, the memory of the genocide, and economic growth; efforts at national unity and relations with neighbors. How does this country achieve prosperity in the shadow of history?",
+      "BDI": "A small country in East Africa, agricultural economy, and political stability—Burundi is developing. Bujumbura's tranquility, the importance of agriculture, and economic challenges; political stability and relations with neighbors. How does this country achieve development with limited resources?",
+      "UGA": "A country in East Africa, agricultural economy, and political stability—Uganda is developing. Kampala's vitality, the importance of agriculture, and economic growth; Museveni's long rule and the challenges of democracy. How does this country find a balance between stability and reform?",
+      "TZA": "A major power in East Africa, agricultural economy, and political stability—Tanzania is developing. Dar es Salaam's vitality, the importance of agriculture, and economic growth; political stability and relations with neighbors. How does this country find a balance between development and environmental protection?",
+      "ZMB": "A country in Southern Africa, copper resources, and economic challenges—Zambia is in transition. Lusaka's development, copper exports, and economic diversification; political stability and relations with neighbors. How does this country find a balance between resource dependence and economic diversification?",
+      "ZWE": "A country in Southern Africa, agricultural resources, and economic challenges—Zimbabwe is in transition. Harare's development, the importance of agriculture, and economic woes; political change and relations with neighbors. How does this country find a balance between economic recovery and political stability?",
+      "NAM": "A country in Southern Africa, mineral resources, and political stability—Namibia is developing. Windhoek's cleanliness, mineral exports, and economic diversification; political stability and relations with neighbors. How does this country find a balance between resource exploitation and sustainable development?",
+      "BWA": "A country in Southern Africa, diamond resources, and political stability—Botswana is Africa's success story. Gaborone's development, diamond exports, and economic diversification; political stability and relations with neighbors. How does this country find a balance between resource dependence and economic diversification?",
+      "LSO": "A small country in Southern Africa, agricultural economy, and political stability—Lesotho is developing. Maseru's tranquility, the importance of agriculture, and economic challenges; political stability and relations with South Africa. How does this country achieve development with limited resources?",
+      "SWZ": "A small country in Southern Africa, agricultural economy, and monarchical rule—Eswatini balances tradition and modernity. Mbabane's development, the importance of agriculture, and political conservatism; relations with neighbors and economic challenges. How does this country find a balance between tradition and development?",
+      "CHL": "The narrow country of the Andes was once a laboratory for neoliberalism. However, the undercurrent of social inequality finally ignited anger on the streets. The difficult birth of a new constitution and the extreme polarization of left and right have caused Santiago's political pendulum to swing wildly between despair and radicalism. Pinochet's ghost has not yet departed, while reformers have hit a wall of reality. The wealth of copper mines has failed to heal the rifts in society, and Chile's future continues to navigate through the fog.",
+      "COL": "The shadow of drug cartels, the embers of guerrillas, and deep-rooted social inequality—Colombia's history is a symphony of violence and resistance. In the corridors of power in Bogotá, the roots of the old establishment remain deep; deforestation in the Amazon and rural poverty test the fragile bottom line of the peace agreement. This land of magical realism is still searching for true tranquility.",
+      "VEN": "Possessing the world's largest oil reserves, yet plunged into an unprecedented collapse. Power in Caracas remains tightly controlled, while sanctions, hyperinflation, and the flight of millions have hollowed out the nation's vitality. The opposition's resistance is waning amidst iron-fisted rule and exhaustion. In this country cursed by black gold, the afterglow of the Bolivarian Revolution leaves only hollow slogans and dim streetlights.",
+      "CUB": "The red fortress of the Caribbean, the era of the founding revolutionaries has drawn to a close. Facing over half a century of blockade, mottled vintage cars still roam the streets of Havana; however, the glimmer of the internet and the awakening of the younger generation are quietly but profoundly impacting the system. Material shortages remain the norm, and on this island where time seems to stand still, the undercurrent of change has been inevitably activated.",
+      "PER": "The source of turmoil in the Andes. Frequent presidential impeachments and protests have turned the presidential palace in Lima into a revolving door of leaders. The marginalization of indigenous peoples and the disconnect of the capital's elites have paralyzed the entire nation politically. The descendants of the Inca Empire struggle amidst corruption and inflation, unable to find a cornerstone to unify the country.",
+      "CHE": "The neutral fortress in the Alps, the ultimate haven for hidden global wealth. Bern's direct democracy and consensus politics allow it to maintain an enviable aloofness in a turbulent Europe. However, as geopolitics reshape and great power competition intensifies, the cost of absolute neutrality becomes increasingly high; wariness toward immigrants and pressure from the Western sanctions system are gradually eroding the ancient foundation of this mountain confederation.",
+      "AUT": "Once the center of the Habsburg Empire, now wandering at the crossroads of Europe. Vienna's classical glory cannot conceal its political rightward shift, and the rise of the far-right leaves the consensus of traditional parties teetering. Inflationary pressures, energy anxiety, and the rejection of immigrants are reshaping the country's political landscape. The commitment to neutrality appears increasingly delicate in a war-torn Europe.",
+      "BEL": "The heart of the EU, but also a kingdom teetering on the edge of division. The linguistic and economic chasm between the Flemish and Walloons often turns cabinet formation in Brussels into a long and painful marathon. The deteriorating security in immigrant neighborhoods and the steady approach of the far-right test the survival resilience of this complex federation.",
+      "IRL": "The former Celtic Tiger relied on low tax rates to attract the stationing of global tech giants. But behind the glamorous data of multinational corporations lies a housing crisis and public service shortage that ordinary people can hardly bear. With the rise of Sinn Féin and the aftershocks of Brexit, the ghost of Irish reunification once again roams the island, challenging the existing political landscape.",
+      "SRB": "The embers of the Balkan powder keg have yet to extinguish. Politicians in Belgrade walk a dangerous tightrope between Brussels' capital and Moscow's traditional friendship. The scars of Kosovo ache from time to time, and the nationalist ghost of Greater Serbia still roams the streets. Caught on the fault line of the new Cold War between East and West, the roar of the Balkan tiger is mixed with a deep sense of powerlessness.",
+      "BLR": "The last shadow of the Iron Curtain in Europe. After the turmoil of 2020, the fate of Minsk is deeply and irreversibly tied to Moscow. Western extreme sanctions and economic stagnation have made it a living fossil on the front lines of the Cold War. In this corner forgotten by time, any hope for change has been heavily frozen.",
+      "PRK": "The hermit kingdom north of the 38th parallel, absolute rule is impregnable in the cold light of nuclear weapons. Pyongyang's military parades display daunting missiles, while the nation struggles to survive under extreme sanctions and isolation. In this country of an information vacuum, deafening slogans cover up the true hunger and cold. It is the last glacier left over from the Cold War.",
+      "TWN": "Merged into China display mode in this map configuration.",
+      "NZL": "A tranquil island nation in the South Pacific, known for its pristine nature and progressive politics. However, Wellington has not been immune to the growing pains of globalization. Inflation, a housing crisis, and debates over indigenous rights have caused cracks in this country seen as a safe haven. While escaping the world's clamor, they find themselves still drawn into the great power games of the Pacific.",
+      "KAZ": "A vast steppe nation in Central Asia, situated between the two giants of Russia and China. The aftermath of 'Bloody January' has Astana attempting to find a balance between the old oligarchs and the new order; abundant oil and gas resources are its bargaining chips, but geopolitical pressure follows it like a shadow. Its future fate depends on whether it can maintain the delicate art of tightrope walking in a multipolar world.",
+      "AFG": "The graveyard of empires. Twenty years of war and the democratic experiment imposed by the West finally ended with the hasty retreat from Kabul. The Taliban re-entered, dragging the country back into the harsh winter of theocratic rule. Economic collapse, the erasure of women from public life, and complete isolation from the international community; this ravaged arid land remains tightly held hostage by warlords, religion, and endless poverty.",
+      "DZA": "The energy giant of North Africa. The 'system' composed of Algiers' military and political elites still controls the nation's lifeline. Abundant natural gas gives it significant leverage in Europe's energy crisis, but the persistently high youth unemployment rate and the thirst for freedom remain an undercurrent beneath this desert.",
+      "MAR": "The kingdom guarding the Strait of Gibraltar. Rabat's royal family maintains a delicate balance, advancing steadily amidst tradition and modernization. Control over Western Sahara strengthens its nationalist narrative, but the urban-rural divide, agricultural crises brought on by drought, and tense surrounding geopolitics remain a Sword of Damocles hanging overhead.",
+      "SDN": "A dirge by the Nile. The brief experiment of a civilian government vanished in the sound of gunfire, and the bloody civil war between the Sudanese Armed Forces and the Rapid Support Forces has reduced Khartoum to ruins. Countless civilians have been displaced, and the country is torn apart by warlord fragmentation and foreign interference. Peace seems out of reach.",
+      "BOL": "The landlocked nation of the Andes. Possessing the world's largest lithium reserves, yet mired in power struggles within the left. The ghost of Morales and his rupture with the current government have once again turned the streets of La Paz into a sea of protests. Resource nationalism has failed to bring universal prosperity, instead becoming a bargaining chip in new geopolitical games.",
+      "ECU": "The nation of the equator is experiencing an unprecedented security crisis. Once a relatively peaceful haven, it has now been reduced to a battlefield for transnational drug cartels. Politicians in Quito are exhausted by frequent impeachments and snap elections, while the port of Guayaquil is shrouded in the shadow of violence. Iron-fisted measures may bring brief respite but can hardly eradicate the deep-rooted rot.",
+      "URY": "The Switzerland of South America, a rare oasis of stability. While neighboring countries are sucked into the vortex of populism and turmoil, Montevideo still maintains an enviable democratic resilience and high welfare system. However, an aging population and bottlenecks in economic growth are quietly testing the limits of this moderate consensus politics.",
+      "BGR": "The edge of the Balkans, the poorest member state of the EU. Sofia's political arena is trapped in an endless cycle of elections; a fractured parliament and deep-rooted oligarchic corruption make any reform attempt arduous. Pro-Russian sentiments and dependence on European funds leave this country caught in the crossfire of the new Cold War's rift.",
+      "HRV": "The pearl of the Adriatic, attracting tourists from all over Europe with its stunning coastline. But beneath the facade of a booming tourism industry lies the continuous drain of young labor and severe reliance on a single economy. Zagreb's right-wing government appears more confident after joining the Eurozone, but the old scars of the Balkan wars still ache faintly in the society's subconscious.",
+      "LTU": "The staunch outpost of the Baltics. Facing immense geopolitical pressure from the East, Vilnius has chosen the toughest stance, not only acting as a proactive vanguard for NATO but also frequently touching the reverse scales of great powers in Far East diplomacy. This asymmetrical toughness has won Western praise, but it also leaves this small country in a constant state of high tension, walking on thin ice.",
+      "UZB": "The heartland of Central Asia, the most populous republic. After enduring a long period of isolation and iron-fisted rule, Tashkent is implementing cautious 'New Uzbekistan' reforms. Doors are gradually opening, and foreign capital is pouring in, but behind the glamorous infrastructure, the logic of power has not fundamentally changed. It navigates deftly among Russia, China, and the West, attempting to recreate the glory of the Silk Road.",
+      "GEO": "The shattered balcony of the Caucasus. The streets of Tbilisi are never short of protesters waving EU flags, yet the ruling 'Georgian Dream' party dangerously tests the edges of pragmatism and pro-Russian leaning. The wounds of Abkhazia and South Ossetia are still bleeding; the European dream and geopolitical reality collide fiercely here, tearing apart this wine-producing nation.",
+      "AZE": "The land of fire by the Caspian Sea. Relying on lucrative oil and gas revenues and staunch support from Turkey, Baku reshaped the map of the Caucasus with overwhelming military superiority in the Nagorno-Karabakh war. The Aliyev family's rule is impregnable, but after the nationalist revelry fades, how to maintain strategic balance among the three geopolitical giants—Russia, China, and Iran—will be the new test.",
+      "ARM": "The tragic nation under the shadow of Mount Ararat. Successive military defeats and territorial losses have plunged Yerevan into deep collective trauma. The traditional umbrella of protection, Russia, appears cold and powerless, while attempts to pivot to the West are too far away to quench immediate thirst. On this isolated Caucasian island surrounded by formidable foes, survival itself has exhausted all its strength.",
+      "MNG": "The vast steppe sandwiched between two major nuclear neighbors. Politicians in Ulaanbaatar are adept at 'Third Neighbor' diplomacy, attempting to use democratic institutions and mineral resources to attract the attention of the US and Europe to hedge against geopolitical pressure. However, coal corruption scandals periodically ignite public anger, and the reality of extreme dependence on neighbors' ports and energy makes it hard for the descendants of nomads to truly ride freely.",
+      "NPL": "The landlocked Buddhist nation at the foothills of the Himalayas. The political situation in Kathmandu is as unpredictable as the mountain monsoons, with the power game between various Communist factions and the Congress Party playing out in endless cycles. It carefully seeks balance between two major powers, India and China, but poverty, youth emigration, and lagging infrastructure make the path to modernization for this snow-capped nation extremely difficult.",
+      "AGO": "The oil behemoth of Southwestern Africa. Although the long civil war is in the past, Luanda's glamorous skyscrapers form a glaring contrast with the endless slums in the suburbs. The ruling MPLA tightly controls the flow of petrodollars; despite the new president's attempts to push for anti-corruption and reform, the roots of vested interest groups are immeasurably deep, leaving the underclass to still struggle under the curse of black gold.",
+      "SOM": "The Horn of Africa that has almost become synonymous with a 'failed state'. The central government in Mogadishu is like a fragile island, barely functioning under the protection of AU peacekeeping forces. The terrorist attacks of Al-Shabaab follow like a shadow, local tribal militias carve up the territory, and the de facto independence of Somaliland makes national unification seem light-years away. Over this arid land, the ghost of anarchy still hovers.",
+      "MLI": "The turbulent eye of the storm in the Sahel. Successive military coups have led Bamako to completely break with the West; French garrisons have gloomily withdrawn, replaced by the cold figures of Russian Wagner mercenaries. Tuareg separatist forces and extremist Islamic militants in the north continue to ravage the vast desert. The junta attempts to mask the collapsing security situation with radical sovereignty narratives, but the road ahead remains painted in blood red."
+    };
+    const LOCAL_PARLIAMENT_DATA_EN = {
+      "CHN": [
+        { "name_en": "CPC", "desc_en": "Communist Party of China & Non-partisans" },
+        { "name_en": "Jiusan", "desc_en": "Jiusan Society (Science/Education)" },
+        { "name_en": "CPWDP", "desc_en": "Chinese Peasants' and Workers' Democratic Party" },
+        { "name_en": "CDL", "desc_en": "China Democratic League" },
+        { "name_en": "CAPD", "desc_en": "China Association for Promoting Democracy" },
+        { "name_en": "CNDCA", "desc_en": "China National Democratic Construction Association" },
+        { "name_en": "RCCK", "desc_en": "Revolutionary Committee of the Chinese Kuomintang" },
+        { "name_en": "CZGP", "desc_en": "China Zhi Gong Party (Overseas Chinese)" },
+        { "name_en": "TDSL", "desc_en": "Taiwan Democratic Self-Government League" },
+        { "name_en": "Vacant", "desc_en": "Vacant Seats" }
+      ],
+      "DEU": [
+        { "name_en": "CDU/CSU", "desc_en": "Christian Democratic Union / Christian Social Union" },
+        { "name_en": "AfD", "desc_en": "Alternative for Germany" },
+        { "name_en": "SPD", "desc_en": "Social Democratic Party" },
+        { "name_en": "GRÜNE", "desc_en": "Alliance 90/The Greens" },
+        { "name_en": "Die Linke", "desc_en": "The Left" },
+        { "name_en": "SSW", "desc_en": "South Schleswig Voter Federation" }
+      ],
+      "GBR": [
+        { "name_en": "Labour", "desc_en": "Labour Party" },
+        { "name_en": "Conservative", "desc_en": "Conservative Party" },
+        { "name_en": "Lib Dems", "desc_en": "Liberal Democrats" },
+        { "name_en": "SNP", "desc_en": "Scottish National Party" },
+        { "name_en": "Sinn Féin", "desc_en": "Sinn Féin" },
+        { "name_en": "Reform UK", "desc_en": "Reform UK" },
+        { "name_en": "DUP", "desc_en": "Democratic Unionist Party" },
+        { "name_en": "Others", "desc_en": "Independents, Greens, etc." }
+      ],
+      "USA": [
+        { "name_en": "Republican", "desc_en": "Republican Party" },
+        { "name_en": "Democrat", "desc_en": "Democratic Party" }
+      ],
+      "FRA": [
+        { "name_en": "NFP", "desc_en": "New Popular Front (Left Alliance)" },
+        { "name_en": "Ensemble", "desc_en": "Presidential Majority Coalition" },
+        { "name_en": "RN", "desc_en": "National Rally (Far-right)" },
+        { "name_en": "LR", "desc_en": "The Republicans (Right-wing)" },
+        { "name_en": "Others", "desc_en": "Other parties & Independents" }
+      ],
+      "JPN": [
+        { "name_en": "LDP", "desc_en": "Liberal Democratic Party" },
+        { "name_en": "CDP", "desc_en": "Constitutional Democratic Party" },
+        { "name_en": "Ishin", "desc_en": "Japan Innovation Party" },
+        { "name_en": "DPFP", "desc_en": "Democratic Party for the People" },
+        { "name_en": "Komeito", "desc_en": "Komeito" },
+        { "name_en": "Reiwa", "desc_en": "Reiwa Shinsengumi" },
+        { "name_en": "JCP", "desc_en": "Japanese Communist Party" },
+        { "name_en": "Independents", "desc_en": "Independents and Others" }
+      ],
+      "ESP": [
+        { "name_en": "PP", "desc_en": "People's Party" },
+        { "name_en": "PSOE", "desc_en": "Spanish Socialist Workers' Party" },
+        { "name_en": "PSC", "desc_en": "Socialists' Party of Catalonia" },
+        { "name_en": "Vox", "desc_en": "Vox" },
+        { "name_en": "SUMAR", "desc_en": "Sumar Coalition" },
+        { "name_en": "ERC", "desc_en": "Republican Left of Catalonia" },
+        { "name_en": "Junts", "desc_en": "Together for Catalonia" },
+        { "name_en": "EH Bildu", "desc_en": "Basque Country Gather" },
+        { "name_en": "PNV", "desc_en": "Basque Nationalist Party" },
+        { "name_en": "Others", "desc_en": "Mixed Group and Others" }
+      ],
+      "ITA": [
+        { "name_en": "FdI", "desc_en": "Brothers of Italy" },
+        { "name_en": "PD", "desc_en": "Democratic Party" },
+        { "name_en": "Lega", "desc_en": "League" },
+        { "name_en": "Forza Italia", "desc_en": "Forza Italia" },
+        { "name_en": "M5S", "desc_en": "Five Star Movement" },
+        { "name_en": "AVS", "desc_en": "Greens and Left Alliance" },
+        { "name_en": "Azione", "desc_en": "Action" },
+        { "name_en": "Others", "desc_en": "Mixed Group and Others" }
+      ],
+      "RUS": [
+        { "name_en": "United Russia", "desc_en": "United Russia Party" },
+        { "name_en": "CPRF", "desc_en": "Communist Party of the Russian Federation" },
+        { "name_en": "A Just Russia", "desc_en": "A Just Russia - For Truth" },
+        { "name_en": "LDPR", "desc_en": "Liberal Democratic Party of Russia" },
+        { "name_en": "New People", "desc_en": "New People Party" },
+        { "name_en": "Independents", "desc_en": "Independents" }
+      ],
+      "IND": [
+        { "name_en": "BJP", "desc_en": "Bharatiya Janata Party (NDA)" },
+        { "name_en": "INC", "desc_en": "Indian National Congress (INDIA)" },
+        { "name_en": "SP", "desc_en": "Samajwadi Party (INDIA)" },
+        { "name_en": "TMC", "desc_en": "Trinamool Congress (INDIA)" },
+        { "name_en": "DMK", "desc_en": "Dravida Munnetra Kazhagam (INDIA)" },
+        { "name_en": "TDP", "desc_en": "Telugu Desam Party (NDA)" },
+        { "name_en": "JD(U)", "desc_en": "Janata Dal (United) (NDA)" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "BRA": [
+        { "name_en": "PL", "desc_en": "Liberal Party" },
+        { "name_en": "PT", "desc_en": "Workers' Party" },
+        { "name_en": "PP", "desc_en": "Progressives" },
+        { "name_en": "MDB", "desc_en": "Brazilian Democratic Movement" },
+        { "name_en": "UNIÃO", "desc_en": "Union Brasil" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "CAN": [
+        { "name_en": "Liberal", "desc_en": "Liberal Party" },
+        { "name_en": "Conservative", "desc_en": "Conservative Party" },
+        { "name_en": "Bloc Québécois", "desc_en": "Bloc Québécois" },
+        { "name_en": "NDP", "desc_en": "New Democratic Party" },
+        { "name_en": "Green", "desc_en": "Green Party" },
+        { "name_en": "Independent", "desc_en": "Independent MPs" }
+      ],
+      "NLD": [
+        { "name_en": "PVV", "desc_en": "Party for Freedom" },
+        { "name_en": "GL-PvdA", "desc_en": "GreenLeft-Labour Alliance" },
+        { "name_en": "VVD", "desc_en": "People's Party for Freedom and Democracy" },
+        { "name_en": "NSC", "desc_en": "New Social Contract" },
+        { "name_en": "D66", "desc_en": "Democrats 66" },
+        { "name_en": "BBB", "desc_en": "Farmer-Citizen Movement" },
+        { "name_en": "CDA", "desc_en": "Christian Democratic Appeal" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "SWE": [
+        { "name_en": "S", "desc_en": "Social Democratic Party" },
+        { "name_en": "SD", "desc_en": "Sweden Democrats" },
+        { "name_en": "M", "desc_en": "Moderate Party" },
+        { "name_en": "KD", "desc_en": "Christian Democrats" },
+        { "name_en": "V", "desc_en": "Left Party" },
+        { "name_en": "C", "desc_en": "Centre Party" },
+        { "name_en": "MP", "desc_en": "Green Party" },
+        { "name_en": "L", "desc_en": "Liberals" }
+      ],
+      "AUS": [
+        { "name_en": "Labor", "desc_en": "Australian Labor Party" },
+        { "name_en": "Liberal", "desc_en": "Liberal Party of Australia" },
+        { "name_en": "National", "desc_en": "National Party of Australia" },
+        { "name_en": "Greens", "desc_en": "Australian Greens" },
+        { "name_en": "Independents", "desc_en": "Independent MPs" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "KOR": [
+        { "name_en": "PPP", "desc_en": "People Power Party" },
+        { "name_en": "DPK", "desc_en": "Democratic Party of Korea" },
+        { "name_en": "RKP", "desc_en": "Rebuilding Korea Party" },
+        { "name_en": "Reform", "desc_en": "Reform Party" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "POL": [
+        { "name_en": "PiS", "desc_en": "Law and Justice" },
+        { "name_en": "KO", "desc_en": "Civic Coalition" },
+        { "name_en": "TD", "desc_en": "Third Way" },
+        { "name_en": "Lewica", "desc_en": "The Left" },
+        { "name_en": "Konfederacja", "desc_en": "Confederation Liberty and Independence" }
+      ],
+      "TUR": [
+        { "name_en": "AKP", "desc_en": "Justice and Development Party" },
+        { "name_en": "CHP", "desc_en": "Republican People's Party" },
+        { "name_en": "MHP", "desc_en": "Nationalist Movement Party" },
+        { "name_en": "İYİ", "desc_en": "Good Party" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "MEX": [
+        { "name_en": "MORENA", "desc_en": "National Regeneration Movement" },
+        { "name_en": "PVEM", "desc_en": "Ecologist Green Party" },
+        { "name_en": "PAN", "desc_en": "National Action Party" },
+        { "name_en": "PT", "desc_en": "Labor Party" },
+        { "name_en": "PRI", "desc_en": "Institutional Revolutionary Party" },
+        { "name_en": "MC", "desc_en": "Citizens' Movement" },
+        { "name_en": "Others", "desc_en": "Other parties & Independents" }
+      ],
+      "ARG": [
+        { "name_en": "LLA", "desc_en": "Liberty Advances" },
+        { "name_en": "UP", "desc_en": "Union for the Homeland" },
+        { "name_en": "UCR", "desc_en": "Radical Civic Union" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "ZAF": [
+        { "name_en": "ANC", "desc_en": "African National Congress" },
+        { "name_en": "DA", "desc_en": "Democratic Alliance" },
+        { "name_en": "MK", "desc_en": "uMkhonto weSizwe Party" },
+        { "name_en": "EFF", "desc_en": "Economic Freedom Fighters" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "IRN": [
+        { "name_en": "Principlists", "desc_en": "Principlists" },
+        { "name_en": "Reformists", "desc_en": "Reformists" },
+        { "name_en": "Independents", "desc_en": "Independents" }
+      ],
+      "ISR": [
+        { "name_en": "Likud", "desc_en": "Likud" },
+        { "name_en": "Yesh Atid", "desc_en": "Yesh Atid" },
+        { "name_en": "Otzma Yehudit", "desc_en": "Jewish Power" },
+        { "name_en": "Shas", "desc_en": "Shas" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "EGY": [
+        { "name_en": "Nation's Future", "desc_en": "Nation's Future Party" },
+        { "name_en": "RPP", "desc_en": "Republican People's Party" },
+        { "name_en": "New Wafd", "desc_en": "New Wafd Party" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "THA": [
+        { "name_en": "Pheu Thai", "desc_en": "Pheu Thai Party" },
+        { "name_en": "Move Forward", "desc_en": "Move Forward Party" },
+        { "name_en": "Bhumjaithai", "desc_en": "Bhumjaithai Party" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "VNM": [
+        { "name_en": "CPV", "desc_en": "Communist Party of Vietnam" },
+        { "name_en": "Independents", "desc_en": "Non-partisan Members" }
+      ],
+      "IDN": [
+        { "name_en": "PDI-P", "desc_en": "Indonesian Democratic Party of Struggle" },
+        { "name_en": "Golkar", "desc_en": "Party of the Functional Groups" },
+        { "name_en": "Gerindra", "desc_en": "Great Indonesia Movement Party" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "PHL": [
+        { "name_en": "Lakas", "desc_en": "Lakas-CMD" },
+        { "name_en": "NUP", "desc_en": "National Unity Party" },
+        { "name_en": "NPC", "desc_en": "Nationalist People's Coalition" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "UKR": [
+        { "name_en": "SN", "desc_en": "Servant of the People" },
+        { "name_en": "ES", "desc_en": "European Solidarity" },
+        { "name_en": "Batkivshchyna", "desc_en": "All-Ukrainian Union Fatherland" },
+        { "name_en": "Independents", "desc_en": "Independents" }
+      ],
+      "ROU": [
+        { "name_en": "PSD", "desc_en": "Social Democratic Party" },
+        { "name_en": "PNL", "desc_en": "National Liberal Party" },
+        { "name_en": "AUR", "desc_en": "Alliance for the Union of Romanians" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "CZE": [
+        { "name_en": "ANO", "desc_en": "Action of Dissatisfied Citizens" },
+        { "name_en": "ODS", "desc_en": "Civic Democratic Party" },
+        { "name_en": "Pirates", "desc_en": "Czech Pirate Party" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "HUN": [
+        { "name_en": "Fidesz", "desc_en": "Fidesz - Hungarian Civic Alliance" },
+        { "name_en": "DK", "desc_en": "Democratic Coalition" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "NOR": [
+        { "name_en": "Ap", "desc_en": "Labour Party" },
+        { "name_en": "H", "desc_en": "Conservative Party" },
+        { "name_en": "FrP", "desc_en": "Progress Party" },
+        { "name_en": "SV", "desc_en": "Socialist Left Party" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "DNK": [
+        { "name_en": "S", "desc_en": "Social Democrats" },
+        { "name_en": "V", "desc_en": "Venstre (Liberal Party)" },
+        { "name_en": "M", "desc_en": "Moderates" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "FIN": [
+        { "name_en": "Kok", "desc_en": "National Coalition Party" },
+        { "name_en": "SDP", "desc_en": "Social Democratic Party" },
+        { "name_en": "PS", "desc_en": "Finns Party" },
+        { "name_en": "Kesk", "desc_en": "Centre Party" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "PRT": [
+        { "name_en": "PS", "desc_en": "Socialist Party" },
+        { "name_en": "PSD", "desc_en": "Social Democratic Party" },
+        { "name_en": "CHEGA", "desc_en": "Chega (Enough)" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "GRC": [
+        { "name_en": "ND", "desc_en": "New Democracy" },
+        { "name_en": "SYRIZA", "desc_en": "Coalition of the Radical Left" },
+        { "name_en": "PASOK", "desc_en": "Panhellenic Socialist Movement" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "SAU": [
+        { "name_en": "Consultative Assembly", "desc_en": "Consultative Assembly of Saudi Arabia" }
+      ],
+      "IRQ": [
+        { "name_en": "Sadrist Movement", "desc_en": "Sadrist Movement" },
+        { "name_en": "State of Law", "desc_en": "State of Law Coalition" },
+        { "name_en": "Al-Nasr", "desc_en": "Victory Coalition" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "JOR": [
+        { "name_en": "IAF", "desc_en": "Islamic Action Front" },
+        { "name_en": "JUF", "desc_en": "Jordanian United Front Party" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "LBN": [
+        { "name_en": "Hezbollah", "desc_en": "Hezbollah" },
+        { "name_en": "Future Movement", "desc_en": "Future Movement" },
+        { "name_en": "FPM", "desc_en": "Free Patriotic Movement" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "PAK": [
+        { "name_en": "PML-N", "desc_en": "Pakistan Muslim League (Nawaz)" },
+        { "name_en": "PPP", "desc_en": "Pakistan Peoples Party" },
+        { "name_en": "PTI", "desc_en": "Pakistan Tehreek-e-Insaf" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "BGD": [
+        { "name_en": "Awami League", "desc_en": "Awami League" },
+        { "name_en": "BNP", "desc_en": "Bangladesh Nationalist Party" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "SRI": [
+        { "name_en": "SLPP", "desc_en": "Sri Lanka Podujana Peramuna" },
+        { "name_en": "SJB", "desc_en": "Samagi Jana Balawegaya" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "MYS": [
+        { "name_en": "PH", "desc_en": "Pakatan Harapan" },
+        { "name_en": "PN", "desc_en": "Perikatan Nasional" },
+        { "name_en": "GPS", "desc_en": "Gabungan Parti Sarawak" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "SGP": [
+        { "name_en": "PAP", "desc_en": "People's Action Party" },
+        { "name_en": "WP", "desc_en": "Workers' Party" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "ETH": [
+        { "name_en": "Prosperity Party", "desc_en": "Prosperity Party" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "KEN": [
+        { "name_en": "UDA", "desc_en": "United Democratic Alliance" },
+        { "name_en": "ODM", "desc_en": "Orange Democratic Movement" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "NGR": [
+        { "name_en": "APC", "desc_en": "All Progressives Congress" },
+        { "name_en": "PDP", "desc_en": "Peoples Democratic Party" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "GHA": [
+        { "name_en": "NPP", "desc_en": "New Patriotic Party" },
+        { "name_en": "NDC", "desc_en": "National Democratic Congress" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "CIV": [
+        { "name_en": "RDR", "desc_en": "Rally of the Republicans" },
+        { "name_en": "RHDP", "desc_en": "Rally of Houphouëtists for Democracy and Peace" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "RWA": [
+        { "name_en": "RPF", "desc_en": "Rwandan Patriotic Front" },
+        { "name_en": "PSD", "desc_en": "Social Democratic Party" },
+        { "name_en": "PL", "desc_en": "Liberal Party" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "TZA": [
+        { "name_en": "CCM", "desc_en": "Chama Cha Mapinduzi" },
+        { "name_en": "CHADEMA", "desc_en": "Party for Democracy and Progress" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "ZMB": [
+        { "name_en": "PF", "desc_en": "Patriotic Front" },
+        { "name_en": "UPND", "desc_en": "United Party for National Development" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "ZWE": [
+        { "name_en": "ZANU-PF", "desc_en": "Zimbabwe African National Union – Patriotic Front" },
+        { "name_en": "MDC Alliance", "desc_en": "Movement for Democratic Change Alliance" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "NAM": [
+        { "name_en": "SWAPO", "desc_en": "South West Africa People's Organisation" },
+        { "name_en": "RDP", "desc_en": "Rally for Democracy and Progress" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "BWA": [
+        { "name_en": "BDP", "desc_en": "Botswana Democratic Party" },
+        { "name_en": "UDC", "desc_en": "Umbrella for Democratic Change" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "CHL": [
+        { "name_en": "Republican", "desc_en": "Republican Party (Far-right)" },
+        { "name_en": "UDI", "desc_en": "Independent Democratic Union" },
+        { "name_en": "RN", "desc_en": "National Renewal" },
+        { "name_en": "PS", "desc_en": "Socialist Party" },
+        { "name_en": "PCCh", "desc_en": "Communist Party" },
+        { "name_en": "Broad Front", "desc_en": "Broad Front Alliance" },
+        { "name_en": "Others", "desc_en": "Centrists and Others" }
+      ],
+      "COL": [
+        { "name_en": "Historic Pact", "desc_en": "Historic Pact for Colombia" },
+        { "name_en": "Liberal", "desc_en": "Colombian Liberal Party" },
+        { "name_en": "Conservative", "desc_en": "Colombian Conservative Party" },
+        { "name_en": "Democratic Center", "desc_en": "Democratic Center" },
+        { "name_en": "Party of the U", "desc_en": "Social Party of National Unity" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "VEN": [
+        { "name_en": "PSUV", "desc_en": "United Socialist Party of Venezuela" },
+        { "name_en": "AD", "desc_en": "Democratic Action" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "CUB": [
+        { "name_en": "PCC", "desc_en": "Communist Party of Cuba" }
+      ],
+      "PER": [
+        { "name_en": "Popular Force", "desc_en": "Popular Force" },
+        { "name_en": "Free Peru", "desc_en": "Free Peru" },
+        { "name_en": "APP", "desc_en": "Alliance for Progress" },
+        { "name_en": "Popular Action", "desc_en": "Popular Action" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "CHE": [
+        { "name_en": "SVP/UDC", "desc_en": "Swiss People's Party" },
+        { "name_en": "SP/PS", "desc_en": "Social Democratic Party" },
+        { "name_en": "The Centre", "desc_en": "The Centre" },
+        { "name_en": "FDP/PLR", "desc_en": "FDP.The Liberals" },
+        { "name_en": "Greens", "desc_en": "Green Party" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "AUT": [
+        { "name_en": "FPÖ", "desc_en": "Freedom Party of Austria" },
+        { "name_en": "ÖVP", "desc_en": "Austrian People's Party" },
+        { "name_en": "SPÖ", "desc_en": "Social Democratic Party of Austria" },
+        { "name_en": "NEOS", "desc_en": "NEOS - The New Austria" },
+        { "name_en": "Greens", "desc_en": "The Greens" }
+      ],
+      "BEL": [
+        { "name_en": "N-VA", "desc_en": "New Flemish Alliance" },
+        { "name_en": "Vlaams Belang", "desc_en": "Flemish Interest" },
+        { "name_en": "MR", "desc_en": "Reformist Movement" },
+        { "name_en": "PS", "desc_en": "Socialist Party (Francophone)" },
+        { "name_en": "PTB-PVDA", "desc_en": "Workers' Party of Belgium" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "IRL": [
+        { "name_en": "Sinn Féin", "desc_en": "Sinn Féin" },
+        { "name_en": "Fianna Fáil", "desc_en": "Fianna Fáil" },
+        { "name_en": "Fine Gael", "desc_en": "Fine Gael" },
+        { "name_en": "Greens", "desc_en": "Green Party" },
+        { "name_en": "Others", "desc_en": "Independents and Others" }
+      ],
+      "SRB": [
+        { "name_en": "SNS", "desc_en": "Serbian Progressive Party" },
+        { "name_en": "SPN", "desc_en": "Serbia Against Violence" },
+        { "name_en": "SPS", "desc_en": "Socialist Party of Serbia" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "BLR": [
+        { "name_en": "Belaya Rus", "desc_en": "Belaya Rus (Pro-Lukashenko)" },
+        { "name_en": "Independents", "desc_en": "Loyalist Independents" }
+      ],
+      "PRK": [
+        { "name_en": "WPK", "desc_en": "Workers' Party of Korea" },
+        { "name_en": "KSDP", "desc_en": "Korean Social Democratic Party" },
+        { "name_en": "Chongu", "desc_en": "Chondoist Chongu Party" },
+        { "name_en": "Chongryon", "desc_en": "General Association of Korean Residents in Japan" }
+      ],
+      "TWN": [
+        { "name_en": "KMT", "desc_en": "Kuomintang (Pan-Blue)" },
+        { "name_en": "DPP", "desc_en": "Democratic Progressive Party (Pan-Green)" },
+        { "name_en": "TPP", "desc_en": "Taiwan People's Party" },
+        { "name_en": "Independents", "desc_en": "Independents" }
+      ],
+      "NZL": [
+        { "name_en": "National", "desc_en": "New Zealand National Party" },
+        { "name_en": "Labour", "desc_en": "New Zealand Labour Party" },
+        { "name_en": "Green", "desc_en": "Green Party of Aotearoa" },
+        { "name_en": "ACT", "desc_en": "ACT New Zealand" },
+        { "name_en": "NZ First", "desc_en": "New Zealand First" },
+        { "name_en": "Te Pāti Māori", "desc_en": "Māori Party" }
+      ],
+      "KAZ": [
+        { "name_en": "Amanat", "desc_en": "Amanat (Ruling Party)" },
+        { "name_en": "Auyl", "desc_en": "Auyl People's Democratic Patriotic Party" },
+        { "name_en": "Ak Zhol", "desc_en": "Ak Zhol Democratic Party" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "AFG": [
+        { "name_en": "Supreme Council", "desc_en": "Taliban Supreme Council" }
+      ],
+      "DZA": [
+        { "name_en": "FLN", "desc_en": "National Liberation Front" },
+        { "name_en": "Independents", "desc_en": "Independents" },
+        { "name_en": "MSP", "desc_en": "Movement of Society for Peace" },
+        { "name_en": "RND", "desc_en": "National Democratic Rally" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "MAR": [
+        { "name_en": "RNI", "desc_en": "National Rally of Independents" },
+        { "name_en": "PAM", "desc_en": "Authenticity and Modernity Party" },
+        { "name_en": "Istiqlal", "desc_en": "Istiqlal Party" },
+        { "name_en": "USFP", "desc_en": "Socialist Union of Popular Forces" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "SDN": [
+        { "name_en": "SAF / TSC", "desc_en": "Sudanese Armed Forces / Transitional Sovereignty Council" }
+      ],
+      "KWT": [
+        { "name_en": "Opposition", "desc_en": "Elected Opposition / Independents" },
+        { "name_en": "Pro-Gov", "desc_en": "Pro-Royal / Establishment" }
+      ],
+      "BOL": [
+        { "name_en": "MAS", "desc_en": "Movement for Socialism" },
+        { "name_en": "CC", "desc_en": "Civic Community" },
+        { "name_en": "Creemos", "desc_en": "We Believe Alliance" }
+      ],
+      "ECU": [
+        { "name_en": "RC", "desc_en": "Citizen Revolution Movement" },
+        { "name_en": "Construye", "desc_en": "Build Movement" },
+        { "name_en": "PSC", "desc_en": "Social Christian Party" },
+        { "name_en": "ADN", "desc_en": "National Democratic Action" },
+        { "name_en": "Others", "desc_en": "Other parties & Independents" }
+      ],
+      "URY": [
+        { "name_en": "Broad Front", "desc_en": "Broad Front Left Coalition" },
+        { "name_en": "National Party", "desc_en": "National Party (Blancos)" },
+        { "name_en": "Colorado Party", "desc_en": "Colorado Party" },
+        { "name_en": "Others", "desc_en": "Cabildo Abierto and others" }
+      ],
+      "BGR": [
+        { "name_en": "GERB-SDS", "desc_en": "GERB-SDS Coalition" },
+        { "name_en": "PP-DB", "desc_en": "We Continue the Change - Democratic Bulgaria" },
+        { "name_en": "Revival", "desc_en": "Revival (Far-right)" },
+        { "name_en": "DPS", "desc_en": "Movement for Rights and Freedoms" },
+        { "name_en": "BSP", "desc_en": "Bulgarian Socialist Party" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "HRV": [
+        { "name_en": "HDZ", "desc_en": "Croatian Democratic Union" },
+        { "name_en": "SDP", "desc_en": "Social Democratic Party of Croatia" },
+        { "name_en": "DP", "desc_en": "Homeland Movement" },
+        { "name_en": "Most", "desc_en": "The Bridge" },
+        { "name_en": "Others", "desc_en": "Other parties & Minority reps" }
+      ],
+      "LTU": [
+        { "name_en": "TS-LKD", "desc_en": "Homeland Union – Lithuanian Christian Democrats" },
+        { "name_en": "LVŽS", "desc_en": "Lithuanian Farmers and Greens Union" },
+        { "name_en": "LSDP", "desc_en": "Social Democratic Party of Lithuania" },
+        { "name_en": "DSVL", "desc_en": "Democratic Union 'For Lithuania'" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "UZB": [
+        { "name_en": "UzLiDeP", "desc_en": "Uzbekistan Liberal Democratic Party" },
+        { "name_en": "Milliy Tiklanish", "desc_en": "National Revival Democratic Party" },
+        { "name_en": "Adolat", "desc_en": "Social Democratic Party 'Adolat'" },
+        { "name_en": "Others", "desc_en": "People's Democratic Party & Ecological Party" }
+      ],
+      "GEO": [
+        { "name_en": "Georgian Dream", "desc_en": "Georgian Dream (Ruling Party)" },
+        { "name_en": "UNM", "desc_en": "United National Movement" },
+        { "name_en": "For Georgia", "desc_en": "For Georgia" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "AZE": [
+        { "name_en": "YAP", "desc_en": "New Azerbaijan Party" },
+        { "name_en": "Independents", "desc_en": "Pro-government Independents" },
+        { "name_en": "Others", "desc_en": "Minor Satellite Parties" }
+      ],
+      "ARM": [
+        { "name_en": "Civil Contract", "desc_en": "Civil Contract (Ruling Party)" },
+        { "name_en": "Armenia Alliance", "desc_en": "Armenia Alliance" },
+        { "name_en": "I Have Honor", "desc_en": "I Have Honor Alliance" }
+      ],
+      "MNG": [
+        { "name_en": "MPP", "desc_en": "Mongolian People's Party" },
+        { "name_en": "DP", "desc_en": "Democratic Party" },
+        { "name_en": "HUN", "desc_en": "National Labor Party" },
+        { "name_en": "Others", "desc_en": "Independents" }
+      ],
+      "NPL": [
+        { "name_en": "NC", "desc_en": "Nepali Congress" },
+        { "name_en": "CPN-UML", "desc_en": "Communist Party of Nepal (UML)" },
+        { "name_en": "CPN-MC", "desc_en": "Communist Party of Nepal (Maoist Centre)" },
+        { "name_en": "RSP", "desc_en": "Rastriya Swatantra Party" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "AGO": [
+        { "name_en": "MPLA", "desc_en": "People's Movement for the Liberation of Angola" },
+        { "name_en": "UNITA", "desc_en": "National Union for the Total Independence of Angola" },
+        { "name_en": "PRS", "desc_en": "Social Renewal Party" },
+        { "name_en": "Others", "desc_en": "Other Parties" }
+      ],
+      "SOM": [
+        { "name_en": "Federal MPs", "desc_en": "Clan Representatives via the 4.5 formula" }
+      ],
+      "MLI": [
+        { "name_en": "CNT", "desc_en": "National Transitional Council (Military Appointed)" }
+      ]
+    };
+
+    const WORLD_GEOJSON_URLS = [
+      "https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson",
+      "https://cdn.jsdelivr.net/gh/holtzy/D3-graph-gallery@master/DATA/world.geojson",
+      "https://mirror.ghproxy.com/https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson"
+    ];
+    const SPARQL_ENDPOINTS = [
+      "https://query.wikidata.org/sparql",
+      "https://query.wikidata.org/bigdata/namespace/wdq/sparql"
+    ];
+    const IMAGE_PROXY_PREFIXES = [
+      "https://mirror.ghproxy.com/",
+      "https://images.weserv.nl/?url="
+    ];
+    const LOCAL_RULING_PARTY_LOGOS = {
+      // 中国：中国共产党
+      // CHN: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Emblem_of_the_Chinese_Communist_Party.svg/320px-Emblem_of_the_Chinese_Communist_Party.svg.png",
+      
+      // // 美国：美国总统徽章
+      // USA: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/36/Seal_of_the_President_of_the_United_States.svg/320px-Seal_of_the_President_of_the_United_States.svg.png",
+      
+      // // 俄罗斯：统一俄罗斯党 (直接使用渲染好的 PNG 缩略图)
+      RUS: "https://upload.wikimedia.org/wikipedia/zh/4/4d/%D0%9B%D0%BE%D0%B3%D0%BE%D1%82%D0%B8%D0%BF_%D0%BF%D0%B0%D1%80%D1%82%D0%B8%D0%B8_-%D0%95%D0%B4%D0%B8%D0%BD%D0%B0%D1%8F_%D0%A0%D0%BE%D1%81%D1%81%D0%B8%D1%8F-.svg",
+      
+      // // 英国：工党
+      // GBR: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/07/Logo_of_the_Labour_Party.svg/320px-Logo_of_the_Labour_Party.svg.png",
+      
+      // // 法国：复兴党 (马克龙所在政党) 
+      FRA: [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Renaissance_logo_2022.svg/320px-Renaissance_logo_2022.svg.png",
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/LaREM_logo.svg/320px-LaREM_logo.svg.png"
+      ]
+    };
+
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+
+    const svg = d3.select("#map-container").append("svg")
+      .attr("width", width)
+      .attr("height", height)
+      .style("width", "100%")
+      .style("height", "100%");
+    const g = svg.append("g");
+    const mapWrap = g.append("g");
+
+    const projection = d3.geoMercator().scale(width / 6.5).translate([width / 2, height / 1.5]);
+    const geoPath = d3.geoPath().projection(projection);
+    let worldLeft = projection([-180, 0])[0];
+    let worldRight = projection([180, 0])[0];
+    let worldWidth = worldRight - worldLeft;
+    const tileOffsets = [-1, 0, 1];
+    const mapLayers = tileOffsets.map(offset => mapWrap.append("g").attr("data-tile", String(offset)));
+
+    const ISO3_ALIASES = { US: "USA", CN: "CHN", UK: "GBR", RU: "RUS", KR: "KOR" };
+    const ISO3_MERGES = { TWN: "CHN" };
+    const fallbackPixel = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+    const I18N = {
+      zh: {
+        pageTitle: "TNO 风格交互式世界地图",
+        topTitle: "TNO WORLD INTELLIGENCE TERMINAL",
+        loading: "LOADING MAP...",
+        loadingFailed: "地图加载失败，请检查网络。",
+        unknown: "UNKNOWN",
+        classified: "DATA CLASSIFIED",
+        noRecord: "NO RECORD",
+        noDescription: "暂无国家描述。",
+        noDescriptionEnFallback: "暂无英文描述。",
+        noPartyDesc: "无说明",
+        noPartyDescEnFallback: "暂无英文说明",
+        flag: "国旗",
+        rulingParty: "执政党",
+        countryPhoto: "国家印象",
+        hos: "国家元首",
+        hog: "政府首脑",
+        ideology: "政体",
+        gdp: "名义 GDP",
+        population: "人口",
+        rulingPartyUnknown: "未知执政党",
+        countryPhotoUnknown: "暂无代表照片",
+        parliament: "立法机构（席位分布）",
+        seat: "席位",
+        sourceInitial: "来源：本地单文件 + Wikidata",
+        sourceLocalCache: "来源：本地单文件 + 全局缓存",
+        sourceLive: "来源：Wikidata 实时查询 + 本地单文件",
+        sourceLiveFailed: "实时查询失败，已显示本地与缓存数据",
+        sourceCacheFailed: "全局缓存加载失败，点击国家仍可按需查询",
+        prcName: "中华人民共和国"
+      },
+      en: {
+        pageTitle: "TNO-Style Interactive World Map",
+        topTitle: "TNO WORLD INTELLIGENCE TERMINAL",
+        loading: "LOADING MAP...",
+        loadingFailed: "Map failed to load. Please check your network.",
+        unknown: "UNKNOWN",
+        classified: "DATA CLASSIFIED",
+        noRecord: "NO RECORD",
+        noDescription: "No country description available.",
+        noDescriptionEnFallback: "English description is not available yet.",
+        noPartyDesc: "No details",
+        noPartyDescEnFallback: "English details are not available yet.",
+        flag: "Flag",
+        rulingParty: "Ruling Party",
+        countryPhoto: "Country Landmark",
+        hos: "Head of State",
+        hog: "Head of Government",
+        ideology: "Ideology",
+        gdp: "Nominal GDP",
+        population: "Population",
+        rulingPartyUnknown: "Unknown ruling party",
+        countryPhotoUnknown: "No landmark image",
+        parliament: "Legislature (Seat Distribution)",
+        seat: "Seats",
+        sourceInitial: "Source: local single-file data + Wikidata",
+        sourceLocalCache: "Source: local single-file data + global cache",
+        sourceLive: "Source: live Wikidata query + local single-file data",
+        sourceLiveFailed: "Live query failed. Showing local and cached data.",
+        sourceCacheFailed: "Global cache failed to load. On-demand query still works on click.",
+        prcName: "People's Republic of China"
+      }
+    };
+    let currentLang = "zh";
+
+    const globalCountryCache = {};
+    const detailCache = {};
+    // 直接使用内嵌数据赋值
+    let parliamentData = LOCAL_PARLIAMENT_DATA;
+    let countryDescriptions = LOCAL_COUNTRY_DESCRIPTIONS;
+    let selectedIso = null;
+    let selectedGeoName = "UNKNOWN";
+    let mapFeatures = [];
+    let currentZoomTransform = d3.zoomIdentity;
+    const zoomBehavior = d3.zoom().scaleExtent([1, 8]).on("zoom", event => {
+      currentZoomTransform = event.transform;
+      const t = currentZoomTransform;
+      const span = worldWidth * t.k;
+      const wrappedX = span > 0 ? ((((t.x % span) + span) % span) - span) : t.x;
+      g.attr("transform", `translate(${wrappedX},${t.y}) scale(${t.k})`);
+    });
+
+    function iso3(feature) {
+      return (feature.id || feature.properties?.iso_a3 || feature.properties?.ISO_A3 || "UNK").toUpperCase();
+    }
+
+    function t(key) {
+      return (I18N[currentLang] && I18N[currentLang][key]) || I18N.zh[key] || key;
+    }
+
+    function normalizeIso(id) {
+      const x = (id || "UNK").toUpperCase();
+      return ISO3_ALIASES[x] || x;
+    }
+
+    function canonicalIso(id) {
+      const n = normalizeIso(id);
+      return ISO3_MERGES[n] || n;
+    }
+
+    function getGeoDisplayName(rawIso, geoName) {
+      return canonicalIso(rawIso) === "CHN" && normalizeIso(rawIso) === "TWN" ? t("prcName") : geoName;
+    }
+
+    function applyLanguage() {
+      document.documentElement.lang = currentLang === "en" ? "en" : "zh-CN";
+      document.title = t("pageTitle");
+      document.getElementById("top-title").innerText = t("topTitle");
+      document.getElementById("label-flag").innerText = t("flag");
+      document.getElementById("label-ruling-party").innerText = t("rulingParty");
+      document.getElementById("label-country-photo").innerText = t("countryPhoto");
+      document.getElementById("hos-title").innerText = t("hos");
+      document.getElementById("hog-title").innerText = t("hog");
+      document.getElementById("label-ideology").innerText = t("ideology");
+      document.getElementById("label-gdp").innerText = t("gdp");
+      document.getElementById("label-population").innerText = t("population");
+      document.getElementById("label-parliament").innerText = t("parliament");
+
+      const loadingEl = document.getElementById("loading");
+      if (loadingEl.style.display !== "none") loadingEl.innerText = t("loading");
+
+      if (!selectedIso) {
+        clearCapitalMarkers();
+        document.getElementById("c-name").innerText = t("unknown");
+        document.getElementById("hos-name").innerText = t("classified");
+        document.getElementById("hog-name").innerText = t("classified");
+        document.getElementById("c-ideology").innerText = t("unknown");
+        document.getElementById("c-gdp").innerText = t("noRecord");
+        document.getElementById("c-population").innerText = t("noRecord");
+        document.getElementById("c-ruling-name").innerText = t("rulingPartyUnknown");
+        document.getElementById("c-ruling-logo").src = fallbackPixel;
+        document.getElementById("c-country-photo").src = fallbackPixel;
+        document.getElementById("c-country-photo-name").innerText = t("countryPhotoUnknown");
+        document.getElementById("c-desc").innerText = t("noDescription");
+      }
+    }
+
+    function localText(value, valueEn) {
+      if (value && typeof value === "object") return value[currentLang] || value.zh || value.en || "";
+      if (currentLang === "en" && typeof valueEn === "string" && valueEn) return valueEn;
+      return value || "";
+    }
+
+    function localDescByCode(code) {
+      const en = LOCAL_COUNTRY_DESCRIPTIONS_EN[code];
+      const raw = countryDescriptions[code];
+      if (raw && typeof raw === "object") return raw[currentLang] || raw.zh || raw.en || t("noDescription");
+      if (currentLang === "en" && typeof en === "string") return en;
+      if (currentLang === "en" && typeof raw === "string" && raw) return t("noDescriptionEnFallback");
+      return raw || t("noDescription");
+    }
+
+    function localizedParliamentList(code, list) {
+      const localEnList = LOCAL_PARLIAMENT_DATA_EN[code] || [];
+      return (Array.isArray(list) ? list : []).map((item, i) => {
+        const enItem = localEnList[i] || {};
+        const nameLocalized = localText(item.name, enItem.name_en) || item.name;
+        let descLocalized = localText(item.desc, enItem.desc_en);
+        if (currentLang === "en" && !enItem.desc_en && typeof item.desc === "string" && item.desc) {
+          descLocalized = t("noPartyDescEnFallback");
+        }
+        return {
+          ...item,
+          _name: nameLocalized,
+          _desc: descLocalized
+        };
+      });
+    }
+
+    function populationText(n) {
+      if (!Number.isFinite(n) || n <= 0) return t("noRecord");
+      return n.toLocaleString(currentLang === "en" ? "en-US" : "zh-CN");
+    }
+
+    function readablePartyColor(color) {
+      const c = d3.color(color || "#458b8b");
+      if (!c) return "#5fa8a8";
+      const rgb = d3.rgb(c);
+      const luminance = (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
+      if (luminance >= 0.18) return rgb.formatHex();
+      const mix = 0.42;
+      const r = Math.round(rgb.r + (255 - rgb.r) * mix);
+      const g = Math.round(rgb.g + (255 - rgb.g) * mix);
+      const b = Math.round(rgb.b + (255 - rgb.b) * mix);
+      return d3.rgb(r, g, b).formatHex();
+    }
+
+    function partyBadgeDataUrl(name, code) {
+      const text = ((name || code || "PP").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3) || "PP");
+      const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='224' height='144' viewBox='0 0 224 144'><rect width='224' height='144' rx='8' fill='#0d2020'/><rect x='8' y='8' width='208' height='128' rx='6' fill='#133636' stroke='#458b8b' stroke-width='3'/><text x='112' y='92' text-anchor='middle' fill='#e0f8f8' font-family='Arial,Helvetica,sans-serif' font-size='54' font-weight='700'>${text}</text></svg>`;
+      return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+    }
+
+    function dedupe(arr) {
+      return Array.from(new Set((arr || []).filter(Boolean)));
+    }
+
+    function buildImageCandidates(url) {
+      if (typeof url === "string" && url.startsWith("data:image/")) return [url];
+      if (!(typeof url === "string" && url.startsWith("http"))) return [fallbackPixel];
+      
+      const normalized = url.replace(/^http:\/\//i, "https://");
+      const list = [normalized];
+      const noProto = normalized.replace(/^https?:\/\//, "");
+      const wikiSpecialPrefix = "commons.wikimedia.org/wiki/Special:FilePath/";
+      const specialIdx = noProto.indexOf(wikiSpecialPrefix);
+
+      // 1. 如果是 Github 数据，专属使用 ghproxy
+      if (normalized.includes("raw.githubusercontent.com") || normalized.includes("github.com")) {
+        const path = normalized.split("github.com/")[1] || normalized.split("raw.githubusercontent.com/")[1] || "";
+        list.push(`https://mirror.ghproxy.com/${normalized}`);
+        list.push(`https://cdn.jsdelivr.net/gh/${path.replace("/master/", "@master/")}`);
+      }
+
+      // 2. 如果是维基百科图片
+      if (specialIdx >= 0) {
+        const fileName = decodeURIComponent(noProto.slice(specialIdx + wikiSpecialPrefix.length)).split("?")[0];
+        const encodedName = encodeURIComponent(fileName);
+        
+        // 维基自带的缩略图引擎（直接将易报错的 svg 转为好加载的 png）
+        list.push(`https://commons.wikimedia.org/wiki/Special:FilePath/${encodedName}?width=320`);
+        
+        // 使用针对 Wiki 优化的代理或通用 CORS 代理（避开容易拦截跳转的 weserv）
+        list.push(`https://wiki.peko.top/wiki/Special:FilePath/${encodedName}?width=320`);
+        list.push(`https://wsrv.nl/?url=commons.wikimedia.org/wiki/Special:FilePath/${encodedName}&output=png`);
+      } else if (!normalized.includes("github")) {
+        // 3. 其他普通外部图片，走通用代理
+        list.push(`https://wsrv.nl/?url=${encodeURIComponent(noProto)}`);
+        list.push(`https://corsproxy.io/?${encodeURIComponent(normalized)}`);
+      }
+
+      return dedupe(list);
+    }
+
+    function setImgWithFallback(id, primaryUrl, extraUrls = []) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const queue = dedupe([
+        ...buildImageCandidates(primaryUrl),
+        ...extraUrls.flatMap(u => buildImageCandidates(u))
+      ]);
+      let idx = 0;
+      const next = () => {
+        idx += 1;
+        el.src = queue[idx] || fallbackPixel;
+      };
+      el.onerror = next;
+      el.src = queue[0] || fallbackPixel;
+    }
+
+    async function fetchJsonFromUrls(urls, options = {}) {
+      let lastErr = null;
+      for (const url of urls) {
+        try {
+          const res = await fetch(url, options);
+          if (!res.ok) throw new Error(`${res.status}`);
+          return await res.json();
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      throw lastErr || new Error("all sources failed");
+    }
+
+    async function querySparqlWithFallback(queryText) {
+      const query = encodeURIComponent(queryText);
+      const urls = SPARQL_ENDPOINTS.map(ep => `${ep}?format=json&query=${query}`);
+      return fetchJsonFromUrls(urls, { headers: { Accept: "application/sparql-results+json" } });
+    }
+
+    function parseWktPoint(wkt) {
+      if (typeof wkt !== "string") return null;
+      const m = wkt.match(/Point\(([-\d.]+)\s+([-\d.]+)\)/i);
+      if (!m) return null;
+      const lon = Number(m[1]);
+      const lat = Number(m[2]);
+      if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+      return [lon, lat];
+    }
+
+    function clearCapitalMarkers() {
+      mapLayers.forEach(layer => {
+        layer.selectAll(".capital-marker").interrupt();
+        layer.selectAll(".capital-marker").remove();
+      });
+    }
+
+    function renderCapitalMarker(coord) {
+      clearCapitalMarkers();
+      if (!Array.isArray(coord) || coord.length !== 2) return;
+      const p = projection(coord);
+      if (!p) return;
+      mapLayers.forEach(layer => {
+        const ring = layer.append("circle")
+          .attr("class", "capital-marker capital-pulse-ring")
+          .attr("cx", p[0])
+          .attr("cy", p[1])
+          .attr("r", 4)
+          .attr("fill", "none")
+          .attr("stroke", "#ffd447")
+          .attr("stroke-width", 2)
+          .attr("pointer-events", "none")
+          .attr("stroke-opacity", 0.8);
+
+        (function pulse() {
+          ring
+            .attr("r", 4)
+            .attr("stroke-opacity", 0.8)
+            .attr("stroke-width", 2)
+            .transition()
+            .duration(1550)
+            .ease(d3.easeCubicOut)
+            .attr("r", 15)
+            .attr("stroke-opacity", 0)
+            .attr("stroke-width", 0.8)
+            .on("end", pulse);
+        })();
+
+        layer.append("circle")
+          .attr("class", "capital-marker")
+          .attr("cx", p[0])
+          .attr("cy", p[1])
+          .attr("r", 3.2)
+          .attr("fill", "#ffd447")
+          .attr("stroke", "#3a2b00")
+          .attr("stroke-width", 1)
+          .attr("pointer-events", "none")
+          .attr("opacity", 0.98);
+      });
+    }
+
+    function hslToHex(h, s, l) {
+      s /= 100; l /= 100;
+      const a = s * Math.min(l, 1 - l);
+      const f = n => {
+        const k = (n + h / 30) % 12;
+        return l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+      };
+      const rgb = [f(0), f(8), f(4)].map(v => Math.round(v * 255).toString(16).padStart(2, "0")).join("");
+      return `#${rgb}`;
+    }
+
+    function baseColor(code) {
+      const s = canonicalIso(code);
+      let h = 0;
+      for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i) * 7919) | 0;
+      const hue = Math.abs(h) % 360;
+      const sat = 28 + (Math.abs(h) % 12);
+      const light = 20 + (Math.abs(h >> 8) % 10);
+      return hslToHex(hue, sat, light);
+    }
+
+    function lighten(hex, amount) {
+      const n = parseInt(hex.replace("#", ""), 16);
+      const r = Math.min(255, Math.max(0, (n >> 16) + amount));
+      const g = Math.min(255, Math.max(0, ((n >> 8) & 255) + amount));
+      const b = Math.min(255, Math.max(0, (n & 255) + amount));
+      return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
+    }
+
+    function hoverColor(code) {
+      return lighten(baseColor(code), 28);
+    }
+
+    function positionPartyTooltip(tip, event) {
+      const panelRect = document.getElementById("ui-panel").getBoundingClientRect();
+      const margin = 10;
+      const offset = 12;
+      const tw = tip.offsetWidth || 220;
+      const th = tip.offsetHeight || 56;
+      const minX = panelRect.left + margin;
+      const maxX = panelRect.right - tw - margin;
+      const minY = panelRect.top + margin;
+      const maxY = panelRect.bottom - th - margin;
+      const x = Math.min(maxX, Math.max(minX, event.clientX + offset));
+      const y = Math.min(maxY, Math.max(minY, event.clientY + offset));
+      tip.style.left = `${x}px`;
+      tip.style.top = `${y}px`;
+    }
+
+    function drawParliament(list) {
+      const el = document.getElementById("parliament-chart");
+      const tip = document.getElementById("party-tooltip");
+      el.innerHTML = "";
+      tip.style.display = "none";
+      tip.innerHTML = "";
+      if (!Array.isArray(list) || list.length === 0) return;
+
+      const containerW = Math.max(260, el.clientWidth || 320);
+      const w = Math.max(240, Math.min(340, Math.floor(containerW * 0.95)));
+      const h = 190;
+      const outerR = Math.min(w / 2 - 12, h - 8);
+      const innerR = outerR * 0.3;
+      const seatR = 2.7;
+      const totalSeats = list.reduce((s, p) => s + Math.max(0, Math.floor(Number(p.seats || 0))), 0);
+      if (totalSeats <= 0) return;
+
+      const rowCount = Math.max(6, Math.min(13, Math.round(Math.sqrt(totalSeats / 2))));
+      const rows = [];
+      for (let ri = 0; ri < rowCount; ri++) {
+        const r = innerR + ((ri + 0.5) * (outerR - innerR)) / rowCount;
+        rows.push({ r, weight: Math.max(1, r) });
+      }
+
+      const totalWeight = rows.reduce((s, r) => s + r.weight, 0);
+      let assigned = 0;
+      rows.forEach(r => {
+        const exact = (totalSeats * r.weight) / totalWeight;
+        r.slots = Math.max(1, Math.floor(exact));
+        r.remainder = exact - r.slots;
+        assigned += r.slots;
+      });
+
+      if (assigned < totalSeats) {
+        rows.sort((a, b) => b.remainder - a.remainder);
+        for (let i = 0; i < totalSeats - assigned; i++) rows[i % rows.length].slots += 1;
+      } else if (assigned > totalSeats) {
+        rows.sort((a, b) => a.remainder - b.remainder);
+        let excess = assigned - totalSeats;
+        for (let i = 0; i < rows.length && excess > 0; i++) {
+          const reducible = Math.max(0, rows[i].slots - 1);
+          const take = Math.min(reducible, excess);
+          rows[i].slots -= take;
+          excess -= take;
+        }
+      }
+
+      const seatPartyData = [];
+      list.forEach(p => {
+        const seats = Math.max(0, Math.floor(Number(p.seats || 0)));
+        for (let i = 0; i < seats; i++) {
+          seatPartyData.push(p);
+        }
+      });
+
+      const slots = [];
+      rows.forEach(row => {
+        for (let i = 0; i < row.slots; i++) {
+          const a = -Math.PI + ((i + 0.5) * Math.PI) / row.slots;
+          slots.push({
+            x: w / 2 + Math.cos(a) * row.r,
+            y: h + Math.sin(a) * row.r,
+            angle: a,
+            radius: row.r
+          });
+        }
+      });
+
+      const plotted = Math.min(seatPartyData.length, slots.length);
+      const angleOrdered = slots.slice().sort((a, b) => {
+        if (a.angle === b.angle) return b.radius - a.radius;
+        return a.angle - b.angle;
+      });
+      const dotData = Array.from({ length: plotted }, (_, i) => ({
+        ...angleOrdered[i],
+        party: seatPartyData[i]
+      }));
+
+      const svgDots = d3.select("#parliament-chart").append("svg").attr("width", w).attr("height", h + 6);
+      svgDots.selectAll("circle").data(dotData).enter().append("circle")
+        .attr("cx", d => d.x)
+        .attr("cy", d => d.y)
+        .attr("r", seatR)
+        .attr("fill", d => readablePartyColor(d.party.color || "#458b8b"))
+        .style("cursor", "pointer")
+        .on("mouseover", function(event, d) {
+          d3.select(this).attr("r", seatR + 1);
+          tip.style.display = "block";
+          tip.innerHTML = `<b style=\"color:${readablePartyColor(d.party.color || "#458b8b")}\">${d.party._name || d.party.name}</b> · ${t("seat")} ${d.party.seats}<br>${d.party._desc || d.party.desc || t("noPartyDesc")}`;
+          positionPartyTooltip(tip, event);
+        })
+        .on("mousemove", function(event) {
+          positionPartyTooltip(tip, event);
+        })
+        .on("mouseout", function() {
+          d3.select(this).attr("r", seatR);
+          tip.style.display = "none";
+          tip.innerHTML = "";
+        });
+    }
+
+    function safeImg(url) {
+      const list = buildImageCandidates(url);
+      return list[0] || fallbackPixel;
+    }
+
+    function logoPrimaryAndFallbacks(value) {
+      if (Array.isArray(value)) {
+        const cleaned = value.filter(v => typeof v === "string" && v);
+        return {
+          primary: cleaned[0] || null,
+          fallbacks: cleaned.slice(1)
+        };
+      }
+      return {
+        primary: (typeof value === "string" && value) ? value : null,
+        fallbacks: []
+      };
+    }
+
+    function countryDesc(code) {
+      const n = canonicalIso(code);
+      return localDescByCode(n) || localDescByCode(code) || t("noDescription");
+    }
+
+    function deriveRulingParty(data, code) {
+      const localLogoRef = LOCAL_RULING_PARTY_LOGOS[canonicalIso(code)] || null;
+      const localLogo = logoPrimaryAndFallbacks(localLogoRef);
+      
+      if (data.ruling_party_name) {
+        return {
+          name: data.ruling_party_name,
+          // 【核心修复】：把 localLogo.primary 移到最左边，让本地设定的图片拥有最高优先级！
+          logo: localLogo.primary || data.ruling_party_logo || partyBadgeDataUrl(data.ruling_party_name, code),
+          logo_fallbacks: localLogo.fallbacks
+        };
+      }
+      
+      const list = Array.isArray(data.parliament) ? data.parliament : [];
+      if (list.length === 0) {
+        return {
+          name: t("rulingPartyUnknown"),
+          // 【核心修复】：同样确保本地优先级最高
+          logo: localLogo.primary || partyBadgeDataUrl(t("rulingPartyUnknown"), code),
+          logo_fallbacks: localLogo.fallbacks
+        };
+      }
+      
+      const top = list.reduce((a, b) => (Number(a.seats || 0) >= Number(b.seats || 0) ? a : b));
+      const partyName = top._name || top.name || t("rulingPartyUnknown");
+      return {
+        name: partyName,
+        // 【核心修复】：同样确保本地优先级最高
+        logo: localLogo.primary || top.logo || top.emblem || partyBadgeDataUrl(partyName, code),
+        logo_fallbacks: localLogo.fallbacks
+      };
+    }
+
+    function deriveCountryPhoto(data, geoName) {
+      return {
+        img: data.landmark_img || null,
+        name: data.landmark_name || geoName || t("countryPhotoUnknown")
+      };
+    }
+
+    function applyPanel(data, geoName, sourceKey, code) {
+      document.getElementById("ui-panel").style.display = "block";
+      document.getElementById("c-name").innerText = data.name || geoName || code || t("unknown");
+      renderCapitalMarker(data.capital_coord || null);
+      setImgWithFallback("c-flag", data.flag);
+      document.getElementById("hos-name").innerText = data.hos || t("classified");
+      document.getElementById("hog-name").innerText = data.hog || t("classified");
+      setImgWithFallback("hos-img", data.hos_img);
+      setImgWithFallback("hog-img", data.hog_img);
+      document.getElementById("c-ideology").innerText = data.ideology || t("unknown");
+      document.getElementById("c-gdp").innerText = data.gdp || t("noRecord");
+      document.getElementById("c-population").innerText = data.population || t("noRecord");
+      const ruling = deriveRulingParty(data, code);
+      document.getElementById("c-ruling-name").innerText = ruling.name || t("rulingPartyUnknown");
+      setImgWithFallback("c-ruling-logo", ruling.logo, ruling.logo_fallbacks || []);
+      const photo = deriveCountryPhoto(data, geoName);
+      setImgWithFallback("c-country-photo", photo.img);
+      document.getElementById("c-country-photo-name").innerText = photo.name || t("countryPhotoUnknown");
+      document.getElementById("c-desc").innerText = countryDesc(code);
+      const statusEl = document.getElementById("data-status");
+      statusEl.classList.remove("warn");
+      statusEl.innerText = t(sourceKey);
+      syncSelectionStyles();
+      drawParliament(data.parliament || []);
+    }
+
+    function syncSelectionStyles() {
+      g.selectAll(".country")
+        .classed("selected", d => canonicalIso(iso3(d)) === selectedIso)
+        .attr("fill", d => (canonicalIso(iso3(d)) === selectedIso ? hoverColor(iso3(d)) : baseColor(iso3(d))))
+        .attr("fill-opacity", 1);
+    }
+
+    async function loadGlobalCache() {
+      const q = `
+SELECT ?iso3 ?countryLabel (SAMPLE(?govFormLabel) AS ?govLabel) (MAX(?gdpValue) AS ?gdpMax) (MAX(?populationValue) AS ?populationMax) WHERE {
+  ?country wdt:P31 wd:Q6256; wdt:P298 ?iso3.
+  OPTIONAL { ?country wdt:P122 ?govForm. }
+  OPTIONAL { ?country p:P2131 ?gdpStmt. ?gdpStmt ps:P2131 ?gdpValue. }
+  OPTIONAL { ?country p:P1082 ?populationStmt. ?populationStmt ps:P1082 ?populationValue. }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "${currentLang === "en" ? "en,zh" : "zh,en"}". }
+}
+GROUP BY ?iso3 ?countryLabel`;
+      const json = await querySparqlWithFallback(q);
+
+      for (const row of json?.results?.bindings || []) {
+        const code = row.iso3?.value;
+        if (!code) continue;
+        const raw = Number(row.gdpMax?.value);
+        let gdp = "NO RECORD";
+        if (Number.isFinite(raw) && raw > 0) {
+          const t = raw / 1e12;
+          const b = raw / 1e9;
+          gdp = t >= 1 ? `$ ${t.toFixed(2)} Trillion` : `$ ${b.toFixed(2)} Billion`;
+        }
+        const populationRaw = Number(row.populationMax?.value);
+        globalCountryCache[code] = {
+          name: row.countryLabel?.value || code,
+          ideology: row.govLabel?.value || null,
+          gdp,
+          population: populationText(populationRaw)
+        };
+      }
+    }
+
+    async function fetchLiveCountry(code) {
+      const n = canonicalIso(code);
+      if (detailCache[n]) return detailCache[n];
+
+      const q = `
+SELECT ?countryLabel ?hosLabel ?hogLabel ?hosImage ?hogImage ?govFormLabel ?gdpValue ?populationValue ?flag ?hogPartyLabel ?hogPartyLogo ?hogPartySeal ?hogPartyPhoto ?capitalLabel ?capitalImage ?capitalCoord WHERE {
+  ?country wdt:P31 wd:Q6256; wdt:P298 "${n}".
+  OPTIONAL { ?country p:P35 ?hosStmt. ?hosStmt ps:P35 ?hos. FILTER NOT EXISTS { ?hosStmt pq:P582 [] } OPTIONAL { ?hos wdt:P18 ?hosImage. } }
+  OPTIONAL {
+    ?country p:P6 ?hogStmt.
+    ?hogStmt ps:P6 ?hog.
+    FILTER NOT EXISTS { ?hogStmt pq:P582 [] }
+    OPTIONAL { ?hog wdt:P18 ?hogImage. }
+    OPTIONAL {
+      ?hog wdt:P102 ?hogParty.
+      OPTIONAL { ?hogParty wdt:P154 ?hogPartyLogo. }
+      OPTIONAL { ?hogParty wdt:P158 ?hogPartySeal. }
+      OPTIONAL { ?hogParty wdt:P18 ?hogPartyPhoto. }
+    }
+  }
+  OPTIONAL { ?country wdt:P122 ?govForm. }
+  OPTIONAL { ?country p:P2131 ?gdpStmt. ?gdpStmt ps:P2131 ?gdpValue. }
+  OPTIONAL { ?country p:P1082 ?populationStmt. ?populationStmt ps:P1082 ?populationValue. }
+  OPTIONAL { ?country wdt:P41 ?flag. }
+  OPTIONAL {
+    ?country wdt:P36 ?capital.
+    OPTIONAL { ?capital wdt:P18 ?capitalImage. }
+    OPTIONAL { ?capital wdt:P625 ?capitalCoord. }
+  }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "${currentLang === "en" ? "en,zh" : "zh,en"}". }
+}
+LIMIT 1`;
+      const row = (await querySparqlWithFallback(q))?.results?.bindings?.[0];
+      if (!row) return null;
+
+      const live = {
+        name: row.countryLabel?.value,
+        hos: row.hosLabel?.value,
+        hog: row.hogLabel?.value,
+        hos_img: row.hosImage?.value,
+        hog_img: row.hogImage?.value,
+        flag: row.flag?.value,
+        ideology: row.govFormLabel?.value,
+        population: populationText(Number(row.populationValue?.value)),
+        ruling_party_name: row.hogPartyLabel?.value,
+        ruling_party_logo: row.hogPartyLogo?.value || row.hogPartySeal?.value || row.hogPartyPhoto?.value,
+        landmark_img: row.capitalImage?.value,
+        landmark_name: row.capitalLabel?.value,
+        capital_coord: parseWktPoint(row.capitalCoord?.value),
+        parliament: localizedParliamentList(n, parliamentData[n] || [])
+      };
+
+      const num = Number(row.gdpValue?.value);
+      if (Number.isFinite(num) && num > 0) {
+        const t = num / 1e12;
+        const b = num / 1e9;
+        live.gdp = t >= 1 ? `$ ${t.toFixed(2)} Trillion` : `$ ${b.toFixed(2)} Billion`;
+      }
+
+      detailCache[n] = live;
+      return live;
+    }
+
+    async function fetchRestCountryFallback(code) {
+      const n = canonicalIso(code);
+      const urls = [
+        `https://restcountries.com/v3.1/alpha/${n}`,
+        `https://mirror.ghproxy.com/https://restcountries.com/v3.1/alpha/${n}`
+      ];
+      try {
+        const data = await fetchJsonFromUrls(urls);
+        const row = Array.isArray(data) ? data[0] : data;
+        if (!row) return null;
+        return {
+          name: row.name?.common || row.name?.official || n,
+          population: populationText(Number(row.population)),
+          flag: row.flags?.png || row.flags?.svg,
+          capital_coord: Array.isArray(row.capitalInfo?.latlng) && row.capitalInfo.latlng.length === 2
+            ? [Number(row.capitalInfo.latlng[1]), Number(row.capitalInfo.latlng[0])]
+            : null
+        };
+      } catch (_) {
+        return null;
+      }
+    }
+
+    async function showCountry(code, geoName) {
+      const n = canonicalIso(code);
+      const base = globalCountryCache[n] || {};
+      const fallback = {
+        name: base.name || geoName || n,
+        hos: t("classified"),
+        hog: t("classified"),
+        ideology: base.ideology || t("unknown"),
+        gdp: base.gdp || t("noRecord"),
+        population: base.population || t("noRecord"),
+        parliament: localizedParliamentList(n, parliamentData[n] || [])
+      };
+
+      applyPanel(fallback, geoName, "sourceLocalCache", n);
+
+      try {
+        const live = await fetchLiveCountry(n);
+        if (live) {
+          applyPanel({ ...fallback, ...live }, geoName, "sourceLive", n);
+          return;
+        }
+        const alt = await fetchRestCountryFallback(n);
+        if (alt) applyPanel({ ...fallback, ...alt }, geoName, "sourceLive", n);
+      } catch (_) {
+        const alt = await fetchRestCountryFallback(n);
+        if (alt) {
+          applyPanel({ ...fallback, ...alt }, geoName, "sourceLive", n);
+          return;
+        }
+        const s = document.getElementById("data-status");
+        s.classList.add("warn");
+        s.innerText = t("sourceLiveFailed");
+      }
+    }
+
+    function updateProjectionAndSize() {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      svg.attr("width", width).attr("height", height);
+      projection.scale(width / 6.5).translate([width / 2, height / 1.5]);
+      worldLeft = projection([-180, 0])[0];
+      worldRight = projection([180, 0])[0];
+      worldWidth = worldRight - worldLeft;
+      mapLayers.forEach((layer, idx) => {
+        layer.attr("transform", `translate(${tileOffsets[idx] * worldWidth},0)`);
+      });
+    }
+
+    function redrawMapPaths() {
+      if (!Array.isArray(mapFeatures) || mapFeatures.length === 0) return;
+      mapLayers.forEach(layer => {
+        layer.selectAll("path.country").attr("d", geoPath);
+      });
+      if (selectedIso) syncSelectionStyles();
+    }
+
+    function handleResize() {
+      updateProjectionAndSize();
+      redrawMapPaths();
+      if (selectedIso) {
+        showCountry(selectedIso, selectedGeoName || t("unknown"));
+      } else {
+        clearCapitalMarkers();
+      }
+      zoomBehavior.transform(svg, currentZoomTransform);
+    }
+
+    async function init() {
+      applyLanguage();
+      document.getElementById("data-status").innerText = t("sourceInitial");
+
+      try { await loadGlobalCache(); } catch (_) {
+        const s = document.getElementById("data-status");
+        s.classList.add("warn");
+        s.innerText = t("sourceCacheFailed");
+      }
+
+      const map = await fetchJsonFromUrls(WORLD_GEOJSON_URLS);
+      mapFeatures = map.features || [];
+      document.getElementById("loading").style.display = "none";
+      updateProjectionAndSize();
+
+      mapLayers.forEach((layer, idx) => {
+        layer.attr("transform", `translate(${tileOffsets[idx] * worldWidth},0)`);
+        layer.selectAll("path").data(mapFeatures).enter().append("path")
+          .attr("class", "country")
+          .attr("d", geoPath)
+          .attr("fill", d => baseColor(iso3(d)))
+          .on("mouseover", function(_e, d) {
+            if (canonicalIso(iso3(d)) !== selectedIso) d3.select(this).attr("fill", hoverColor(iso3(d)));
+          })
+          .on("mouseout", function(_e, d) {
+            if (canonicalIso(iso3(d)) !== selectedIso) d3.select(this).attr("fill", baseColor(iso3(d)));
+          })
+          .on("click", function(_e, d) {
+            selectedIso = canonicalIso(iso3(d));
+            selectedGeoName = getGeoDisplayName(iso3(d), d.properties?.name || t("unknown"));
+            clearCapitalMarkers();
+            syncSelectionStyles();
+            showCountry(selectedIso, selectedGeoName);
+          });
+      });
+
+      svg.call(zoomBehavior);
+      window.addEventListener("resize", handleResize);
+    }
+
+    const langSelect = document.getElementById("language-select");
+    const browserLang = (navigator.language || "").toLowerCase();
+    if (browserLang.startsWith("en")) currentLang = "en";
+    langSelect.value = currentLang;
+    langSelect.addEventListener("change", async e => {
+      currentLang = e.target.value === "en" ? "en" : "zh";
+      applyLanguage();
+      Object.keys(globalCountryCache).forEach(k => delete globalCountryCache[k]);
+      Object.keys(detailCache).forEach(k => delete detailCache[k]);
+      try {
+        await loadGlobalCache();
+      } catch (_) {
+        const s = document.getElementById("data-status");
+        s.classList.add("warn");
+        s.innerText = t("sourceCacheFailed");
+      }
+      if (selectedIso) {
+        await showCountry(selectedIso, selectedGeoName || t("unknown"));
+      } else {
+        document.getElementById("data-status").innerText = t("sourceInitial");
+      }
+    });
+
+    init().catch(err => {
+      document.getElementById("loading").innerText = t("loadingFailed");
+      console.error(err);
+    });
+  </script>
+</body>
+</html>
