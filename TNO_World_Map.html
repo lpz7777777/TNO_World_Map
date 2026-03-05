@@ -165,11 +165,11 @@
     .stats-col .info-row {
       justify-content: flex-start;
       gap: 10px;
-      margin-bottom: 7px;
+      margin-bottom: 12px;
     }
     .stats-col .info-label {
-      width: 78px;
-      flex: 0 0 78px;
+      width: 96px;
+      flex: 0 0 96px;
     }
     .stats-col .info-value {
       text-align: left;
@@ -185,6 +185,26 @@
 
     .info-label { color: var(--sub); }
     .info-value { color: var(--text); font-weight: bold; text-align: right; }
+    .label-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      text-align: center;
+      margin-right: 6px;
+      color: #587676;
+      vertical-align: -2px;
+    }
+    .label-icon svg {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.7;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
     .flag-party-row {
       display: flex;
       align-items: center;
@@ -300,7 +320,7 @@
       border: 1px solid rgba(69, 139, 139, 0.3);
       padding: 8px;
       background: transparent;
-      margin-top: -60px;
+      margin-top: -100px;
     }
     .parliament-layout {
       display: flex;
@@ -388,24 +408,16 @@
       background: rgba(69, 139, 139, 0.05);
       font-size: 12px;
     }
-    .weapon-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 8px;
-    }
-    .weapon-item img {
+    .mil-chart {
       width: 100%;
-      height: 90px;
-      object-fit: cover;
-      border: 1px solid var(--line);
-      background: #051010;
+      border: 1px solid rgba(69, 139, 139, 0.3);
+      background: rgba(69, 139, 139, 0.04);
+      padding: 8px;
     }
-    .weapon-item .name {
-      margin-top: 4px;
-      font-size: 11px;
+    .mil-note {
+      margin-top: 6px;
+      font-size: 12px;
       color: var(--sub);
-      text-align: center;
-      min-height: 28px;
     }
 
     .loading {
@@ -484,9 +496,10 @@
 
     <div class="stats-parliament-wrap">
       <div class="stats-col">
-        <div class="info-row"><div class="info-label" id="label-ideology">政体</div><div class="info-value" id="c-ideology">UNKNOWN</div></div>
-        <div class="info-row"><div class="info-label" id="label-gdp">名义 GDP</div><div class="info-value" id="c-gdp">NO RECORD</div></div>
-        <div class="info-row"><div class="info-label" id="label-population">人口</div><div class="info-value" id="c-population">NO RECORD</div></div>
+        <div class="info-row"><div class="info-label"><span class="label-icon"><svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M8 7l-2 10h12L16 7"/><path d="M12 4v3"/></svg></span><span id="label-ideology">政体</span></div><div class="info-value" id="c-ideology">UNKNOWN</div></div>
+        <div class="info-row"><div class="info-label"><span class="label-icon"><svg viewBox="0 0 24 24"><path d="M4 19h16"/><path d="M7 16V10"/><path d="M12 16V6"/><path d="M17 16v-4"/></svg></span><span id="label-gdp">名义 GDP</span></div><div class="info-value" id="c-gdp">NO RECORD</div></div>
+        <div class="info-row"><div class="info-label"><span class="label-icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="2.2"/><path d="M4.8 16.5c.8-2.1 2.4-3.2 4.2-3.2s3.4 1.1 4.2 3.2"/><circle cx="16.8" cy="9.2" r="1.7"/><path d="M14.4 16.5c.6-1.6 1.8-2.4 3-2.4 1.3 0 2.3.8 2.9 2.4"/></svg></span><span id="label-population">人口</span></div><div class="info-value" id="c-population">NO RECORD</div></div>
+        <div class="info-row"><div class="info-label"><span class="label-icon"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1.5"/><path d="M9 5v14"/><path d="M15 5v14"/><path d="M5 9h14"/><path d="M5 15h14"/></svg></span><span id="label-area">面积</span></div><div class="info-value" id="c-area">NO RECORD</div></div>
       </div>
       <div class="parliament-col">
         <div class="parliament-container">
@@ -514,7 +527,8 @@
         <div class="mil-card"><span id="mil-label-navy">海军</span>：<b id="mil-navy">-</b></div>
         <div class="mil-card"><span id="mil-label-air">空军</span>：<b id="mil-air">-</b></div>
       </div>
-      <div class="weapon-grid" id="weapon-grid"></div>
+      <div class="mil-chart" id="mil-chart"></div>
+      <div class="mil-note" id="mil-note">正在等待国家选择。</div>
     </div>
 
     <div class="status" id="data-status">来源：本地 + Wikidata</div>
@@ -2052,6 +2066,8 @@
         ideology: "政体",
         gdp: "名义 GDP",
         population: "人口",
+        area: "面积",
+        ethnicity: "主体民族",
         rulingPartyUnknown: "未知执政党",
         countryPhotoUnknown: "暂无代表照片",
         parliament: "立法机构（席位分布）",
@@ -2062,14 +2078,20 @@
         ecoWaiting: "正在等待国家选择。",
         ecoLoading: "正在加载经济数据...",
         ecoNoData: "部分年份无数据，图中已留空。",
+        ecoZeroRule: "注：除贫困率外，值为 0 的年份视为坏点并已排除。",
         ecoGdp: "GDP（美元）",
         ecoPoverty: "贫困率（%）",
         ecoHdi: "HDI（指数）",
-        ecoAge: "0-14岁人口占比（%）",
+        ecoAge: "老龄人口占比（65+，%）",
         milTotal: "总兵力",
         milArmy: "陆军",
         milNavy: "海军",
         milAir: "空军",
+        milLoading: "正在加载军事趋势数据...",
+        milWaiting: "正在等待国家选择。",
+        milNoData: "部分年份无数据，图中已留空。",
+        milExp: "军费开支（美元）",
+        milExpGdp: "军费占GDP比（%）",
         sourceInitial: "来源：本地单文件 + Wikidata",
         sourceLocalCache: "来源：本地单文件 + 全局缓存",
         sourceLive: "来源：Wikidata 实时查询 + 本地单文件",
@@ -2097,6 +2119,8 @@
         ideology: "Ideology",
         gdp: "Nominal GDP",
         population: "Population",
+        area: "Area",
+        ethnicity: "Major Ethnicity",
         rulingPartyUnknown: "Unknown ruling party",
         countryPhotoUnknown: "No landmark image",
         parliament: "Legislature (Seat Distribution)",
@@ -2107,14 +2131,20 @@
         ecoWaiting: "Select a country to view data.",
         ecoLoading: "Loading economic indicators...",
         ecoNoData: "Missing years are left blank with no interpolation.",
+        ecoZeroRule: "Note: zero values are treated as bad points and removed, except for poverty rate.",
         ecoGdp: "GDP (USD)",
         ecoPoverty: "Poverty Rate (%)",
         ecoHdi: "HDI (Index)",
-        ecoAge: "Population Aged 0-14 (%)",
+        ecoAge: "Population Aged 65+ (%)",
         milTotal: "Total Personnel",
         milArmy: "Army",
         milNavy: "Navy",
         milAir: "Air Force",
+        milLoading: "Loading military trend data...",
+        milWaiting: "Select a country to view data.",
+        milNoData: "Missing years are left blank.",
+        milExp: "Military Expenditure (USD)",
+        milExpGdp: "Military Expenditure (% of GDP)",
         sourceInitial: "Source: local single-file data + Wikidata",
         sourceLocalCache: "Source: local single-file data + global cache",
         sourceLive: "Source: live Wikidata query + local single-file data",
@@ -2180,6 +2210,7 @@
       document.getElementById("label-ideology").innerText = t("ideology");
       document.getElementById("label-gdp").innerText = t("gdp");
       document.getElementById("label-population").innerText = t("population");
+      document.getElementById("label-area").innerText = t("area");
       document.getElementById("label-parliament").innerText = t("parliament");
       document.getElementById("tab-overview").innerText = t("tabOverview");
       document.getElementById("tab-economy").innerText = t("tabEconomy");
@@ -2200,12 +2231,14 @@
         document.getElementById("c-ideology").innerText = t("unknown");
         document.getElementById("c-gdp").innerText = t("noRecord");
         document.getElementById("c-population").innerText = t("noRecord");
+        document.getElementById("c-area").innerText = t("noRecord");
         document.getElementById("c-ruling-name").innerText = t("rulingPartyUnknown");
         document.getElementById("c-ruling-logo").src = fallbackPixel;
         document.getElementById("c-country-photo").src = fallbackPixel;
         document.getElementById("c-country-photo-name").innerText = t("countryPhotoUnknown");
         document.getElementById("c-desc").innerText = t("noDescription");
         document.getElementById("economy-note").innerText = t("ecoWaiting");
+        document.getElementById("mil-note").innerText = t("milWaiting");
       }
     }
 
@@ -2244,6 +2277,12 @@
     function populationText(n) {
       if (!Number.isFinite(n) || n <= 0) return t("noRecord");
       return n.toLocaleString(currentLang === "en" ? "en-US" : "zh-CN");
+    }
+
+    function areaText(n) {
+      if (!Number.isFinite(n) || n <= 0) return t("noRecord");
+      const v = n.toLocaleString(currentLang === "en" ? "en-US" : "zh-CN");
+      return currentLang === "en" ? `${v} km²` : `${v} 平方公里`;
     }
 
     function readablePartyColor(color) {
@@ -2545,6 +2584,13 @@
       }));
     }
 
+    function sanitizeSeriesZeroRule(series, allowZero) {
+      return (Array.isArray(series) ? series : []).map(p => ({
+        year: p.year,
+        value: Number.isFinite(p.value) && (allowZero || p.value !== 0) ? p.value : null
+      }));
+    }
+
     function drawSingleIndicatorChart(target, title, data, color, formatter) {
       const holder = document.createElement("div");
       holder.className = "eco-item";
@@ -2622,21 +2668,16 @@
       document.getElementById("mil-army").innerText = formatNum(army);
       document.getElementById("mil-navy").innerText = formatNum(navy);
       document.getElementById("mil-air").innerText = formatNum(air);
+    }
 
-      const weaponGrid = document.getElementById("weapon-grid");
-      weaponGrid.innerHTML = "";
-      const weapons = Array.isArray(base?.weapons) && base.weapons.length > 0 ? base.weapons : [
-        { name: currentLang === "en" ? "Main Battle Tank" : "主战坦克", name_en: "Main Battle Tank", img: selectedCountryData?.landmark_img || fallbackPixel },
-        { name: currentLang === "en" ? "Fighter Aircraft" : "战斗机", name_en: "Fighter Aircraft", img: selectedCountryData?.hos_img || fallbackPixel },
-        { name: currentLang === "en" ? "Capital Vessel" : "主力舰艇", name_en: "Capital Vessel", img: selectedCountryData?.hog_img || fallbackPixel }
-      ];
-      weapons.slice(0, 3).forEach(w => {
-        const div = document.createElement("div");
-        div.className = "weapon-item";
-        const displayName = currentLang === "en" ? (w.name_en || w.name) : (w.name || w.name_en);
-        div.innerHTML = `<img src="${safeImg(w.img)}" alt="weapon"><div class="name">${displayName}</div>`;
-        weaponGrid.appendChild(div);
-      });
+    function drawMilitaryChart(expSeries, expGdpSeries) {
+      const el = document.getElementById("mil-chart");
+      el.innerHTML = "";
+      const grid = document.createElement("div");
+      grid.className = "eco-chart-grid";
+      el.appendChild(grid);
+      drawSingleIndicatorChart(grid, t("milExp"), expSeries, "#e58dff", d3.format(".2s"));
+      drawSingleIndicatorChart(grid, t("milExpGdp"), expGdpSeries, "#7fc9ff", d => `${d3.format(".2f")(d)}%`);
     }
 
     async function loadEconomyPane(code) {
@@ -2646,15 +2687,29 @@
       const gdp = await fetchWorldBankSeries(iso2, "NY.GDP.MKTP.CD");
       const pov = await fetchWorldBankSeries(iso2, "SI.POV.DDAY");
       const hci = await fetchWorldBankSeries(iso2, "HD.HCI.OVRL");
-      const age = await fetchWorldBankSeries(iso2, "SP.POP.0014.TO.ZS");
+      const age = await fetchWorldBankSeries(iso2, "SP.POP.65UP.TO.ZS");
       const currentYear = new Date().getFullYear();
       const years = Array.from({ length: 10 }, (_, i) => currentYear - 9 + i);
-      const gdpSet = buildYearSlots(gdp, years);
-      const povSet = buildYearSlots(pov, years);
-      const hdiSet = buildYearSlots(hci, years);
-      const ageSet = buildYearSlots(age, years);
+      const gdpSet = sanitizeSeriesZeroRule(buildYearSlots(gdp, years), false);
+      const povSet = sanitizeSeriesZeroRule(buildYearSlots(pov, years), true);
+      const hdiSet = sanitizeSeriesZeroRule(buildYearSlots(hci, years), false);
+      const ageSet = sanitizeSeriesZeroRule(buildYearSlots(age, years), false);
       drawEconomyChart(gdpSet, povSet, hdiSet, ageSet);
-      note.innerText = t("ecoNoData");
+      note.innerText = `${t("ecoNoData")} ${t("ecoZeroRule")}`;
+    }
+
+    async function loadMilitaryPane(code) {
+      const note = document.getElementById("mil-note");
+      note.innerText = t("milLoading");
+      const iso2 = selectedIso2 || iso3ToIso2(code);
+      const exp = await fetchWorldBankSeries(iso2, "MS.MIL.XPND.CD");
+      const expGdp = await fetchWorldBankSeries(iso2, "MS.MIL.XPND.GD.ZS");
+      const currentYear = new Date().getFullYear();
+      const years = Array.from({ length: 10 }, (_, i) => currentYear - 9 + i);
+      const expSet = sanitizeSeriesZeroRule(buildYearSlots(exp, years), false);
+      const expGdpSet = sanitizeSeriesZeroRule(buildYearSlots(expGdp, years), false);
+      drawMilitaryChart(expSet, expGdpSet);
+      note.innerText = t("milNoData");
     }
 
     function drawParliament(list) {
@@ -2835,6 +2890,7 @@
       document.getElementById("c-ideology").innerText = data.ideology || t("unknown");
       document.getElementById("c-gdp").innerText = data.gdp || t("noRecord");
       document.getElementById("c-population").innerText = data.population || t("noRecord");
+      document.getElementById("c-area").innerText = data.area || t("noRecord");
       const ruling = deriveRulingParty(data, code);
       document.getElementById("c-ruling-name").innerText = ruling.name || t("rulingPartyUnknown");
       setImgWithFallback("c-ruling-logo", ruling.logo, ruling.logo_fallbacks || []);
@@ -2849,6 +2905,7 @@
       drawParliament(data.parliament || []);
       renderMilitaryPane(code);
       loadEconomyPane(code);
+      loadMilitaryPane(code);
     }
 
     function syncSelectionStyles() {
@@ -2860,11 +2917,12 @@
 
     async function loadGlobalCache() {
       const q = `
-SELECT ?iso3 ?countryLabel (SAMPLE(?govFormLabel) AS ?govLabel) (MAX(?gdpValue) AS ?gdpMax) (MAX(?populationValue) AS ?populationMax) WHERE {
+SELECT ?iso3 ?countryLabel (SAMPLE(?govFormLabel) AS ?govLabel) (MAX(?gdpValue) AS ?gdpMax) (MAX(?populationValue) AS ?populationMax) (MAX(?areaValue) AS ?areaMax) WHERE {
   ?country wdt:P31 wd:Q6256; wdt:P298 ?iso3.
   OPTIONAL { ?country wdt:P122 ?govForm. }
   OPTIONAL { ?country p:P2131 ?gdpStmt. ?gdpStmt ps:P2131 ?gdpValue. }
   OPTIONAL { ?country p:P1082 ?populationStmt. ?populationStmt ps:P1082 ?populationValue. }
+  OPTIONAL { ?country wdt:P2046 ?areaValue. }
   SERVICE wikibase:label { bd:serviceParam wikibase:language "${currentLang === "en" ? "en,zh" : "zh,en"}". }
 }
 GROUP BY ?iso3 ?countryLabel`;
@@ -2881,13 +2939,16 @@ GROUP BY ?iso3 ?countryLabel`;
           gdp = t >= 1 ? `$ ${t.toFixed(2)} Trillion` : `$ ${b.toFixed(2)} Billion`;
         }
         const populationRaw = Number(row.populationMax?.value);
+        const areaRaw = Number(row.areaMax?.value);
         globalCountryCache[code] = {
           name: row.countryLabel?.value || code,
           ideology: row.govLabel?.value || null,
           gdp,
           population: populationText(populationRaw),
+          area: areaText(areaRaw),
           gdp_value_raw: raw,
-          population_raw: populationRaw
+          population_raw: populationRaw,
+          area_raw: areaRaw
         };
       }
     }
@@ -2897,7 +2958,7 @@ GROUP BY ?iso3 ?countryLabel`;
       if (detailCache[n]) return detailCache[n];
 
       const q = `
-SELECT ?countryLabel ?hosLabel ?hogLabel ?hosImage ?hogImage ?govFormLabel ?gdpValue ?populationValue ?flag ?hogPartyLabel ?hogPartyLogo ?hogPartySeal ?hogPartyPhoto ?capitalLabel ?capitalImage ?capitalCoord WHERE {
+SELECT ?countryLabel ?hosLabel ?hogLabel ?hosImage ?hogImage ?govFormLabel ?gdpValue ?populationValue ?areaValue ?ethnicLabel ?flag ?hogPartyLabel ?hogPartyLogo ?hogPartySeal ?hogPartyPhoto ?capitalLabel ?capitalImage ?capitalCoord WHERE {
   ?country wdt:P31 wd:Q6256; wdt:P298 "${n}".
   OPTIONAL { ?country p:P35 ?hosStmt. ?hosStmt ps:P35 ?hos. FILTER NOT EXISTS { ?hosStmt pq:P582 [] } OPTIONAL { ?hos wdt:P18 ?hosImage. } }
   OPTIONAL {
@@ -2915,6 +2976,8 @@ SELECT ?countryLabel ?hosLabel ?hogLabel ?hosImage ?hogImage ?govFormLabel ?gdpV
   OPTIONAL { ?country wdt:P122 ?govForm. }
   OPTIONAL { ?country p:P2131 ?gdpStmt. ?gdpStmt ps:P2131 ?gdpValue. }
   OPTIONAL { ?country p:P1082 ?populationStmt. ?populationStmt ps:P1082 ?populationValue. }
+  OPTIONAL { ?country wdt:P2046 ?areaValue. }
+  OPTIONAL { ?country wdt:P172 ?ethnic. }
   OPTIONAL { ?country wdt:P41 ?flag. }
   OPTIONAL {
     ?country wdt:P36 ?capital.
@@ -2936,6 +2999,8 @@ LIMIT 1`;
         flag: row.flag?.value,
         ideology: row.govFormLabel?.value,
         population: populationText(Number(row.populationValue?.value)),
+        area: areaText(Number(row.areaValue?.value)),
+        ethnicity: row.ethnicLabel?.value || null,
         ruling_party_name: row.hogPartyLabel?.value,
         ruling_party_logo: row.hogPartyLogo?.value || row.hogPartySeal?.value || row.hogPartyPhoto?.value,
         landmark_img: row.capitalImage?.value,
@@ -2943,6 +3008,7 @@ LIMIT 1`;
         capital_coord: parseWktPoint(row.capitalCoord?.value),
         gdp_value_raw: Number(row.gdpValue?.value),
         population_raw: Number(row.populationValue?.value),
+        area_raw: Number(row.areaValue?.value),
         parliament: localizedParliamentList(n, parliamentData[n] || [])
       };
 
@@ -2970,6 +3036,7 @@ LIMIT 1`;
         return {
           name: row.name?.common || row.name?.official || n,
           population: populationText(Number(row.population)),
+          area: areaText(Number(row.area)),
           flag: row.flags?.png || row.flags?.svg,
           capital_coord: Array.isArray(row.capitalInfo?.latlng) && row.capitalInfo.latlng.length === 2
             ? [Number(row.capitalInfo.latlng[1]), Number(row.capitalInfo.latlng[0])]
@@ -2990,8 +3057,11 @@ LIMIT 1`;
         ideology: base.ideology || t("unknown"),
         gdp: base.gdp || t("noRecord"),
         population: base.population || t("noRecord"),
+        area: base.area || t("noRecord"),
+        ethnicity: base.ethnicity || t("noRecord"),
         gdp_value_raw: Number(base.gdp_value_raw),
         population_raw: Number(base.population_raw),
+        area_raw: Number(base.area_raw),
         parliament: localizedParliamentList(n, parliamentData[n] || [])
       };
 
