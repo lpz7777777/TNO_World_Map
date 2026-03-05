@@ -55,11 +55,10 @@ Live Data Source / 实时数据源: Wikidata Query Service (SPARQL)
 Fallback Data Source / 备用数据源: REST Countries API
 
 📸 Screenshots / 界面截图
-(You can add your screenshots here later / 你可以在这里补充你的运行截图)
 
-![Map View](./assets/screenshot1.png)
+<img width="3028" height="1566" alt="image" src="https://github.com/user-attachments/assets/b142f943-8789-48b4-8117-56a5240c49de" />
+<img width="3036" height="1568" alt="image" src="https://github.com/user-attachments/assets/62d14afa-add8-4186-a957-76544c1645c8" />
 
-![Country Panel](./assets/screenshot2.png)
 
 📜 License / 开源协议
 This project is licensed under the MIT License.
